@@ -5,6 +5,7 @@ library(mclust)
 library(e1071)
 library(ggpubr)
 
+
 save.image("WormDigestHetSims.Rdata")
 
 load("WormDigestHetSims.Rdata")
@@ -423,42 +424,20 @@ pAll8b<-All8b %>%
 	theme(text=element_text(size=14), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
 	labs(title="Minimal Microbiome Totals", y="log10(CFU/Worm)")
 pAll8b
-ggsave("pAll8LogTotal.png", width=6, height=4, units="in", dpi=300)
+#ggsave("pAll8LogTotal.png", width=6, height=4, units="in", dpi=300)
 
-pAU37<-subset(All8b, Host=="AU37") %>%
-	ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), axis.text.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="AU37", y="log10(CFU/Worm)")
-pN2<-subset(All8b, Host=="N2") %>%
-	ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), axis.text.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="N2", y="log10(CFU/Worm)")
-pdaf2<-subset(All8b, Host=="daf2") %>%
-	ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) + geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), axis.text.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title=expression(italic("daf-2")), y="log10(CFU/Worm)")
-pdec1<-subset(All8b, Host=="dec1") %>%
-	ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) + geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), axis.text.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title=expression(italic("dec-1")), y="log10(CFU/Worm)")
-peat14<-subset(All8b, Host=="eat14") %>%
-	ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) + geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), axis.text.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title=expression(italic("eat-14")), y="log10(CFU/Worm)")
-pexp1<-subset(All8b, Host=="exp1") %>%
-	ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) + geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), axis.text.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title=expression(italic("exp-1")), y="log10(CFU/Worm)")
-pphm2<-subset(All8b, Host=="phm2") %>%
-	ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) + geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), axis.text.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title=expression(italic("phm-2")), y="log10(CFU/Worm)")
-plot_grid(pN2, pAU37, pdaf2, pdec1, peat14, pexp1, pphm2, pAll8b, labels="AUTO", ncol=2, nrow=4)
-ggsave("pAll8LogCFUHostByDay.png", width=7, height=10, units="in", dpi=300)
-#unique(All8b$Date[All8b$Host=="phm2"])
-#pphm2
+# Plot out individual replicates by host genotype
+All8b%>%
+  ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
+  theme(text=element_text(size=14), 
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        legend.position="none", 
+        plot.title=element_text(hjust=0.5, size=16)) +
+  labs(title="Minimal community colonization, by replicate", y=expression(log[10](CFU/Worm))) +
+  facet_wrap(~Host, scales="free_x", ncol=4)
+#ggsave("pAll8LogCFUHostByDay.png", width=7, height=10, units="in", dpi=300)
 
 # turns out a lot of the early runs were low n
 # not great for quantifying heterogeneity
