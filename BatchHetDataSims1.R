@@ -605,11 +605,11 @@ for (i in seq_along(conditions.big)){
 		# get values for Hogg's calculations
 		mylen<-length(tempCFU)
 		idx05<-ceiling(mylen/20)
-		if(idx05>1){U05<-mean(tempCFU[1:idx05])} else {U05<-tempCFU[1]}
+		if(idx05>1){L05<-mean(tempCFU[1:idx05])} else {L05<-tempCFU[1]}
 		idx25<-ceiling(mylen/4)
 		idx75<-floor(mylen*0.75)
 		idx95<-floor(mylen*0.95)
-		if(idx95<mylen){L05<-mean(tempCFU[- (1:idx95)])} else {L05<-tail(tempCFU,1)}
+		if(idx95<mylen){U05<-mean(tempCFU[- (1:(idx95-1))])} else {U05<-tail(tempCFU,1)}
 		M5<-mean(tempCFU[idx25:idx75])
 		idx50<-round(mylen/2)
 		L5<-mean(tempCFU[1:idx50])
@@ -643,174 +643,112 @@ write.table(AllCountsStats.r2r, "WormDataRunToRun.txt", sep="\t")
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # let's plot out
-# first add the SE and SA data to the CFU/worm by rep plots
 
-SaBleachCount2$Date<-as.factor(SaBleachCount2$Date)
-pSaBleachCount<-SaBleachCount2 %>%
-  ggplot(aes(x=Date, y=logCount, color=Date)) + 
+AllCounts %>%
+  ggplot(aes(x=Date, y=logTotal, color=Date)) + 
   geom_point(shape=16, position=position_jitterdodge(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
   theme(text=element_text(size=16), 
         axis.title.x = element_blank(), 
-        axis.text.x = element_text(size=12),
+        axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=14),
         legend.position = "none") + 
-  labs(title=expression(paste(italic("S. aureus"), " Newman")), y="log10(CFU/worm)")
-pSaBleachCount
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~   COME BACK TO THIS
-# and the NRRL data for MO.I2.9
-# 
-NRRL1counts$Date<-as.factor(NRRL1counts$Date)
-names(NRRL1counts)
-
-pMO.I2.9<-subset(NRRL1counts, Condition=="MO.I2.9") %>%
-  ggplot(aes(x=Date, y=logCFU, color=Date)) +
-  geom_point(shape=16, position=position_jitterdodge(0.05)) +
-  geom_violin(fill=NA) + 
-  theme_classic() + 
-  ylim(2,6) +
-  theme(text=element_text(size=16), 
-        axis.title.x = element_blank(), 
-        axis.text.x = element_text(size=12),
-        plot.title=element_text(hjust=0.5, size=14),
-        legend.position = "none") + 
-  labs(title="MO.I2.9", y="log10(CFU/worm)")
-
-plot_grid(pN2.b, pAU37.b, pdaf16.b, pdaf2.b, 
-          pdbl1.b, pdec1.b, pexp1.b, pvhp1.b, 
-          pAll8.big, pSEsingle, pSaBleachCount, pMO.I2.9,
-          labels="AUTO", ncol=3, nrow=4, align="h")
+  facet_wrap(~Condition, scales="free_x")
+  
 #~~~~~ FIGURE 2
 ggsave("pAll8BigSaSeCFUHostByDay.png", width=12, height=10, units="in", dpi=300)
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~ Plot out the moments by condition
-pmaxCFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=log10(maxCFU), color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) + ylim(-0.1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="Max CFU", y="log10(CFU/Worm)")
-pmaxCFU
-pminCFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=log10(minCFU), color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) + ylim(-0.1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="Min CFU", y="log10(CFU/Worm)")
-pmeanCFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=log10(meanCFU), color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) + ylim(-0.1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="Mean CFU", y="log10(CFU/Worm)")
-pq90CFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=log10(q90), color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) + ylim(-0.1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="q90", y="log10(CFU/Worm)")
-#pq90CFU
-pq75CFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=log10(q75), color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) + ylim(-0.1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="q75", y="log10(CFU/Worm)")
-#pq75CFU
-pq50CFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=log10(q50), color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) + ylim(-0.1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="q50", y="log10(CFU/Worm)")
-pq10CFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=log10(q10), color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) + ylim(-0.1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="q10", y="log10(CFU/Worm)")
-pskewCFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=skewCFU, color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="Skewness", y="Skewness")
-pkurtCFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=kurtCFU, color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="Kurtosis", y="Kurtosis")
-pcvCFU<-All8.big.r2r %>%
-	ggplot(aes(x=Host, y=cvCFU, color=Host))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_boxplot(fill=NA) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.text.x = element_text(angle = 45, hjust=1),axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="CV", y="CV")
-plot_grid(pmaxCFU, pmeanCFU, pminCFU, pq90CFU, pq50CFU, pq10CFU, pcvCFU, pskewCFU, pkurtCFU, ncol=3, nrow=3)
+names(AllCountsStats.r2r)
+
+#some of these stats are hard to see on linear axes; mutate to plot
+AllCountStats.r2r %>%
+  mutate(logmeanCFU=log10(meanCFU),
+         logq50=log10(q50))
+
+AllCountStats.r2r %>% 
+  select(Condition, logmeanCFU, skewCFU, kurtCFU, Q1, Q2, cvCFU, logq50) %>%
+  pivot_longer(., cols = c(logmeanCFU, skewCFU, kurtCFU, Q1, Q2, cvCFU, logq50), names_to = "Var", values_to = "Value") %>%
+  ggplot(aes(x=Condition, y=Value, color=Condition))+
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_boxplot(fill=NA) + 	
+  theme_classic() + 
+  theme(text=element_text(size=14), 
+        axis.text.x = element_text(angle = 45, hjust=1),
+        axis.title.x = element_blank(), 
+        legend.position="none", 
+        plot.title=element_text(hjust=0.5, size=16)) +
+  facet_wrap(vars(Var), scales="free_y")
+  
 ggsave("pComparingMomentsRunToRunWormCFU.png", width=14, height=10, units="in", dpi=300)
 
 ### cool. Now let's do the pairwise comparisons
-# for means/quantiles, we'll rescale difference as abs(distance)/sum
-#rownames<-All8.big.r2r$Host
-#colnames<-All8.big.r2r$Host
-#All8.meandist.m<-matrix(nrow=npairs, ncol=npairs, dimnames=list(rownames, colnames))
-#for(i in 1:npairs){
-#	for (j in 1:npairs){
-#		All8.meandist.m[i,j]<-abs(All8.big.r2r$meanCFU[i]-All8.big.r2r$meanCFU[j])/(All8.big.r2r$meanCFU[i]+All8.big.r2r$meanCFU[j])
-#	}
-#}
-
 # actually I think I want this as a data frame
-npairs<-dim(All8.big.r2r)[1]
+npairs<-dim(AllCountStats.r2r)[1]
 # we have an alphabetical order problem let's fix it
-All8.big.r2r.t<-as_tibble(All8.big.r2r)
-All8.big.r2r.t<-arrange(All8.big.r2r.t, Host)
-hostlist<-unique(All8.big.r2r.t$Host)
-hostcount<-as.data.frame(table(All8.big.r2r.t$Host))
+AllCountStats.r2r.t<-as_tibble(AllCountStats.r2r)
+AllCountStats.r2r.t<-arrange(AllCountStats.r2r, Condition)
+hostlist<-unique(AllCountStats.r2r.t$Condition)
+hostcount<-as.data.frame(table(AllCountStats.r2r.t$Condition))
 
-host1<-rep(as.character(All8.big.r2r.t$Host[1]), npairs-1)
-host2<-All8.big.r2r.t$Host[-1]
+host1<-rep(as.character(AllCountStats.r2r.t$Condition[1]), npairs-1)
+host2<-AllCountStats.r2r.t$Condition[-1]
 for (i in 2:(npairs-1)){
-	host1<-c(host1, rep(as.character(All8.big.r2r.t$Host[i]), npairs-i))
+	host1<-c(host1, rep(as.character(AllCountStats.r2r.t$Condition[i]), npairs-i))
 	idx<-seq(1,i)
-	host2<-c(host2, All8.big.r2r.t$Host[-idx])
+	host2<-c(host2, AllCountStats.r2r.t$Condition[-idx])
 }
 
 #names(All8.big.r2r.t)
 
 #~~~~~~~~~~~~~~~~~~~
-# now we can run through and make comparisons
-# first between means
-# using my own measure and traditional Cohen's D
-meanCFUdist<-as.numeric()
-meanCFUCohenD<-as.numeric()
-idx<-1
+# now let's look at the differences in statistics
+
+AllCountStats.r2r.dist <- tibble(meanCFUdist=numeric(),
+                                 meanCFUCohenD=numeric(),
+                                 mediandist=numeric(),
+                                 cvdist=numeric(),
+                                 skewdist=numeric(),
+                                 kurtdist=numeric(),
+                                 Q1dist=numeric(),
+                                 Q2dist=numeric())
+
+#~~~~~~~~~   NOT WORKING YET
 #npairs<-2 #for testing
 for(i in 1:(npairs-1)){
 	#print(i)
 	for (j in (i+1):npairs){
 		#print(j)
-		meanCFUdist[idx]<-abs(All8.big.r2r.t$meanCFU[i]-All8.big.r2r.t$meanCFU[j])/(All8.big.r2r.t$meanCFU[i]+All8.big.r2r.t$meanCFU[j])
-	  meanCFUCohenD[idx]<-abs(All8.big.r2r.t$meanCFU[i]-All8.big.r2r.t$meanCFU[j])/sqrt(min(All8.big.r2r.t$varCFU[i],All8.big.r2r.t$varCFU[i]))
-		idx<-idx+1
-#		print(idx)
+	  bind_rows(AllCountStats.r2r.dist, tibble(
+		meanCFUdist=abs(AllCountStats.r2r.t$meanCFU[i]-AllCountStats.r2r.t$meanCFU[j])/(AllCountStats.r2r.t$meanCFU[i]+AllCountStats.r2r.t$meanCFU[j]),
+	  meanCFUCohenD=abs(AllCountStats.r2r.t$meanCFU[i]-AllCountStats.r2r.t$meanCFU[j])/sqrt(min(AllCountStats.r2r.t$varCFU[i],AllCountStats.r2r.t$varCFU[i])),
+		mediandist=abs(AllCountStats.r2r.t$q50[i]-AllCountStats.r2r.t$q50[j])/(AllCountStats.r2r.t$q50[i]+AllCountStats.r2r.t$q50[j]),
+		cvdist=abs(AllCountStats.r2r.t$cvCFU[i]-AllCountStats.r2r.t$cvCFU[j]),
+		skewdist=abs(AllCountStats.r2r.t$skewCFU[i]-AllCountStats.r2r.t$skewCFU[j]),
+		kurtdist=abs(AllCountStats.r2r.t$kurtCFU[i]-AllCountStats.r2r.t$kurtCFU[j]),
+		Q1dist=abs(AllCountStats.r2r.t$Q1[i]-AllCountStats.r2r.t$Q1[j]),
+		Q2dist=abs(AllCountStats.r2r.t$Q2[i]-AllCountStats.r2r.t$Q2[j])
+		)
+	  )
 	}
 }
 
-#let's toss these into a data frame
-All8.big.r2r.dist<-data.frame(host1, host2, meanCFUdist)
-names(All8.big.r2r.dist)
+# add the condition labels
+AllCountStats.r2r.dist$host1<-host1 
+AllCountStats.r2r.dist$host2<-host2
+names(AllCountStats.r2r.dist)
 idx<-which(host1==host2)
 idx
-All8.big.r2r.dist$same<-"Different"
-All8.big.r2r.dist$same[idx]<-"Same"
-All8.big.r2r.dist$same<-as.factor(All8.big.r2r.dist$same)
+AllCountStats.r2r.dist$same<-"Different"
+AllCountStats.r2r.dist$same[idx]<-"Same"
+AllCountStats.r2r.dist$same<-as.factor(AllCountStats.r2r.dist$same)
 
-pAll8MeanCFUdist<-All8.big.r2r.dist %>%
+# plot out 
+AllCountStats.r2r.dist
+
+pAll8MeanCFUdist<-AllCountStats.r2r.dist %>%
   ggplot(aes(x=same, y=meanCFUdist, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	theme_classic() + 
@@ -823,71 +761,6 @@ pAll8MeanCFUdist<-All8.big.r2r.dist %>%
 pAll8MeanCFUdist
 ggsave("pAll8MeanCFUdist.png", width=6, height=4, units="in", dpi=300)
 
-#~~~~~~~~~~~~~~~~~~~
-### Also data frame and plot Cohen's d
-### to have the more commonly used measure on hand
-
-All8.big.r2r.CohenD<-data.frame(host1, host2, meanCFUCohenD)
-#names(All8.big.r2r.dist)
-idx<-which(host1==host2)
-All8.big.r2r.CohenD$same<-"Different"
-All8.big.r2r.CohenD$same[idx]<-"Same"
-All8.big.r2r.CohenD$same<-as.factor(All8.big.r2r.CohenD$same)
-pAll8MeanCFUCohenD<-All8.big.r2r.CohenD %>%
-  ggplot(aes(x=same, y=log10(meanCFUCohenD), color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  stat_compare_means(label.y = 2, label.x=1.5) +
-  labs(title="", y="dist(Cohen d)")
-pAll8MeanCFUCohenD
-ggsave("pAll8MeanCFUCohenD.png", width=6, height=4, units="in", dpi=300)
-max(meanCFUCohenD[idx])
-median(meanCFUCohenD[idx])
-quantile(meanCFUCohenD[idx],probs=0.9)
-
-#~~~~~~~~~~~~~~~~~~~
-# differences in median?
-#names(All8.big.r2r)
-All8.big.r2r.dist$mediandist<-NA
-idx<-1
-for(i in 1:(npairs-1)){
-  for (j in (i+1):npairs){
-    All8.big.r2r.dist$mediandist[idx]<-abs(All8.big.r2r.t$q50[i]-All8.big.r2r.t$q50[j])/(All8.big.r2r.t$q50[i]+All8.big.r2r.t$q50[j])
-    idx<-idx+1
-  }
-}
-
-pAll8q50CFUdist<-All8.big.r2r.dist %>%
-  ggplot(aes(x=same, y=mediandist, color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  stat_compare_means(label.y = 0.99, label.x=1.4) +
-  labs(title="", y="dist(median)")
-pAll8q50CFUdist
-
-#~~~~~~~~~~~~~~~~~~~
-# now let's look at the differences in CV, skew and kurtosis
-All8.big.r2r.dist$cvdist<-NA
-All8.big.r2r.dist$skewdist<-NA
-All8.big.r2r.dist$kurtdist<-NA
-idx<-1
-for(i in 1:(npairs-1)){
-  for (j in (i+1):npairs){
-    All8.big.r2r.dist$cvdist[idx]<-abs(All8.big.r2r.t$cvCFU[i]-All8.big.r2r.t$cvCFU[j])
-    All8.big.r2r.dist$skewdist[idx]<-abs(All8.big.r2r.t$skewCFU[i]-All8.big.r2r.t$skewCFU[j])
-    All8.big.r2r.dist$kurtdist[idx]<-abs(All8.big.r2r.t$kurtCFU[i]-All8.big.r2r.t$kurtCFU[j])
-    idx<-idx+1
-    #		print(idx)
-  }
-}
 
 pAll8cvCFUdist<-All8.big.r2r.dist %>%
   ggplot(aes(x=same, y=cvdist, color=same))+
