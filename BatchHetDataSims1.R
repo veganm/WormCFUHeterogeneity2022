@@ -685,8 +685,8 @@ AllCountStats.r2r %>%
 ggsave("pComparingMomentsRunToRunWormCFU.png", width=14, height=10, units="in", dpi=300)
 
 ### cool. Now let's do the pairwise comparisons
-# actually I think I want this as a data frame
 npairs<-dim(AllCountStats.r2r)[1]
+
 # we have an alphabetical order problem let's fix it
 AllCountStats.r2r.t<-as_tibble(AllCountStats.r2r)
 AllCountStats.r2r.t<-arrange(AllCountStats.r2r, Condition)
@@ -712,16 +712,16 @@ AllCountStats.r2r.dist <- tibble(meanCFUdist=numeric(),
                                  cvdist=numeric(),
                                  skewdist=numeric(),
                                  kurtdist=numeric(),
-                                 Q1dist=numeric(),
-                                 Q2dist=numeric())
+                                 Q1dist=numeric(), # a measure of skewness
+                                 Q2dist=numeric()) # a measure of tail weight
 
-#~~~~~~~~~   NOT WORKING YET
-#npairs<-2 #for testing
+#~~~~~~~~~   Calculate all pairwise distances and store
+#npairs<-3 #for testing
 for(i in 1:(npairs-1)){
 	#print(i)
 	for (j in (i+1):npairs){
 		#print(j)
-	  bind_rows(AllCountStats.r2r.dist, tibble(
+	  AllCountStats.r2r.dist<-bind_rows(AllCountStats.r2r.dist, tibble(
 		meanCFUdist=abs(AllCountStats.r2r.t$meanCFU[i]-AllCountStats.r2r.t$meanCFU[j])/(AllCountStats.r2r.t$meanCFU[i]+AllCountStats.r2r.t$meanCFU[j]),
 	  meanCFUCohenD=abs(AllCountStats.r2r.t$meanCFU[i]-AllCountStats.r2r.t$meanCFU[j])/sqrt(min(AllCountStats.r2r.t$varCFU[i],AllCountStats.r2r.t$varCFU[i])),
 		mediandist=abs(AllCountStats.r2r.t$q50[i]-AllCountStats.r2r.t$q50[j])/(AllCountStats.r2r.t$q50[i]+AllCountStats.r2r.t$q50[j]),
@@ -745,8 +745,52 @@ AllCountStats.r2r.dist$same<-"Different"
 AllCountStats.r2r.dist$same[idx]<-"Same"
 AllCountStats.r2r.dist$same<-as.factor(AllCountStats.r2r.dist$same)
 
-# plot out 
+# sanity check 
 AllCountStats.r2r.dist
+AllCountStats.r2r.dist[idx,]
+
+# and plot out
+AllCountStats.r2r.dist %>%
+  select(same, cvdist, meanCFUdist, mediandist) %>%
+  pivot_longer(., cols = c(cvdist, meanCFUdist, mediandist), names_to = "Var", values_to = "Value") %>%
+  ggplot(aes(x=same, y=Value, color=same))+
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_boxplot(fill=NA) +	theme_classic() + 
+  theme(text=element_text(size=14), 
+        axis.title.x = element_blank(), 
+        legend.position="none", 
+        plot.title=element_text(hjust=0.5, size=16)) +
+  labs(title="", y="Distance")+
+  facet_wrap(vars(Var), scales="free_y")+
+  stat_compare_means(label.y = -0.5, label.x=1.2)
+
+AllCountStats.r2r.dist %>%
+  select(same, meanCFUCohenD, kurtdist, Q1dist) %>%
+  pivot_longer(., cols = c(meanCFUCohenD, kurtdist, Q1dist), names_to = "Var", values_to = "Value") %>%
+  ggplot(aes(x=same, y=Value, color=same))+
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_boxplot(fill=NA) +	theme_classic() + 
+  theme(text=element_text(size=14), 
+        axis.title.x = element_blank(), 
+        legend.position="none", 
+        plot.title=element_text(hjust=0.5, size=16)) +
+  labs(title="", y="Distance")+
+  facet_wrap(vars(Var), scales="free_y")+
+  stat_compare_means(label.y = -5, label.x=1.2)
+
+AllCountStats.r2r.dist %>%
+  select(same, Q2dist, skewdist) %>%
+  pivot_longer(., cols = c(Q2dist, skewdist), names_to = "Var", values_to = "Value") %>%
+  ggplot(aes(x=same, y=Value, color=same))+
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_boxplot(fill=NA) +	theme_classic() + 
+  theme(text=element_text(size=14), 
+        axis.title.x = element_blank(), 
+        legend.position="none", 
+        plot.title=element_text(hjust=0.5, size=16)) +
+  labs(title="", y="Distance")+
+  facet_wrap(vars(Var), scales="free_y")+
+  stat_compare_means(label.y = -1, label.x=1.2)
 
 pAll8MeanCFUdist<-AllCountStats.r2r.dist %>%
   ggplot(aes(x=same, y=meanCFUdist, color=same))+
