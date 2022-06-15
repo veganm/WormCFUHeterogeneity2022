@@ -5,6 +5,9 @@ library(mclust)
 library(e1071)
 library(ggpubr)
 
+# Code variously stolen from
+# https://www.datanovia.com/en/blog/how-to-change-ggplot-facet-labels/
+
 
 save.image("WormDigestHetSims.Rdata")
 
@@ -503,16 +506,23 @@ All8.big[All8.big=="10202021"]<-"10/20/21"
 All8.big$Date<-as.factor(All8.big$Date)
 
 # Plot out individual replicates by host genotype
+# first create new facet labels
+host.labs<-c("AU37", "daf-16", "daf-2", "dbl-1", "dec-1", "exp-1", "N2", "vhp-1")
+names(host.labs)<-c("AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "N2", "vhp1")
 pAll8.big.byHost<-All8.big%>%
   ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
+  labs(title="Minimal community colonization, by replicate", y=expression(log[10](CFU/Worm))) +
+  facet_wrap(~Host, scales="free_x", ncol=4, labeller=labeller(Host=host.labs))+
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(), 
         legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  labs(title="Minimal community colonization, by replicate", y=expression(log[10](CFU/Worm))) +
-  facet_wrap(~Host, scales="free_x", ncol=4)
+        plot.title=element_text(hjust=0.5, size=16),
+        strip.text.x = element_text(size=12, face="italic"))
+pAll8.big.byHost
+ggsave("pAll8BigLogCFUHostByDay.png", width=12, height=9, units="in", dpi=300)
+
 
 pAll8.big<-All8.big %>%
 	ggplot(aes(x=as.factor(Host), y=logTotal, color=as.factor(Host)))+
@@ -520,15 +530,14 @@ pAll8.big<-All8.big %>%
 	geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
 	theme(text=element_text(size=14), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
 	labs(title="Minimal Microbiome Totals", y=expression(log[10](CFU/Worm)))
+pAll8.big
 
-plot_grid()
-ggsave("pAll8BigLogCFUHostByDay.png", width=12, height=9, units="in", dpi=300)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ########## OK now we are going to take a WHOLE BUNCH of summary stats and see what we get
 
-AllCounts<-as.tibble(subset(All8.big, select=c("Host", "Date", "Total", "logTotal")))
+AllCounts<-as_tibble(subset(All8.big, select=c("Host", "Date", "Total", "logTotal")))
 names(AllCounts)
 
 # Incorporate the pathogen colonization data
@@ -642,19 +651,25 @@ write.table(AllCountsStats.r2r, "WormDataRunToRun.txt", sep="\t")
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# let's plot out
+# let's plot out single worm statistics
+# first create new facet labels
+condition.labs<-c("N2","AU37", "daf-16", "daf-2", "dbl-1", "dec-1", "exp-1", "vhp-1", "M. oxydans",  "S. aureus", "S. enterica")
+names(condition.labs)<-c("N2","AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "vhp1", "MO.I2.9",  "SA", "SE")
 
 AllCounts %>%
+  mutate(Condition=factor(Condition, levels=c("N2","AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "vhp1", "MO.I2.9", "SA", "SE"))) %>%
   ggplot(aes(x=Date, y=logTotal, color=Date)) + 
   geom_point(shape=16, position=position_jitterdodge(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
+#  facet_wrap(~Condition, scales="free_x")+
+ facet_wrap(~Condition, scales="free_x", labeller=labeller(Condition=condition.labs))+
   theme(text=element_text(size=16), 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=14),
-        legend.position = "none") + 
-  facet_wrap(~Condition, scales="free_x")
+        legend.position = "none",
+        strip.text.x = element_text(size=12, face="italic"))
   
 #~~~~~ FIGURE 2
 ggsave("pAll8BigSaSeCFUHostByDay.png", width=12, height=10, units="in", dpi=300)
@@ -664,7 +679,7 @@ ggsave("pAll8BigSaSeCFUHostByDay.png", width=12, height=10, units="in", dpi=300)
 names(AllCountsStats.r2r)
 
 #some of these stats are hard to see on linear axes; mutate to plot
-AllCountStats.r2r %>%
+AllCountStats.r2r<-AllCountsStats.r2r %>%
   mutate(logmeanCFU=log10(meanCFU),
          logq50=log10(q50))
 
@@ -701,7 +716,7 @@ for (i in 2:(npairs-1)){
 	host2<-c(host2, AllCountStats.r2r.t$Condition[-idx])
 }
 
-#names(All8.big.r2r.t)
+names(AllCountStats.r2r.t)
 
 #~~~~~~~~~~~~~~~~~~~
 # now let's look at the differences in statistics
@@ -723,7 +738,7 @@ for(i in 1:(npairs-1)){
 		#print(j)
 	  AllCountStats.r2r.dist<-bind_rows(AllCountStats.r2r.dist, tibble(
 		meanCFUdist=abs(AllCountStats.r2r.t$meanCFU[i]-AllCountStats.r2r.t$meanCFU[j])/(AllCountStats.r2r.t$meanCFU[i]+AllCountStats.r2r.t$meanCFU[j]),
-	  meanCFUCohenD=abs(AllCountStats.r2r.t$meanCFU[i]-AllCountStats.r2r.t$meanCFU[j])/sqrt(min(AllCountStats.r2r.t$varCFU[i],AllCountStats.r2r.t$varCFU[i])),
+	  meanCFUCohenD=abs(AllCountStats.r2r.t$meanCFU[i]-AllCountStats.r2r.t$meanCFU[j])/sqrt((AllCountStats.r2r.t$varCFU[i]+AllCountStats.r2r.t$varCFU[j])/2),
 		mediandist=abs(AllCountStats.r2r.t$q50[i]-AllCountStats.r2r.t$q50[j])/(AllCountStats.r2r.t$q50[i]+AllCountStats.r2r.t$q50[j]),
 		cvdist=abs(AllCountStats.r2r.t$cvCFU[i]-AllCountStats.r2r.t$cvCFU[j]),
 		skewdist=abs(AllCountStats.r2r.t$skewCFU[i]-AllCountStats.r2r.t$skewCFU[j]),
@@ -750,9 +765,12 @@ AllCountStats.r2r.dist
 AllCountStats.r2r.dist[idx,]
 
 # and plot out
-AllCountStats.r2r.dist %>%
-  select(same, cvdist, meanCFUdist, mediandist) %>%
-  pivot_longer(., cols = c(cvdist, meanCFUdist, mediandist), names_to = "Var", values_to = "Value") %>%
+my.labs<-c("Mean CFU", "Cohen's D", "Median", "CV")
+names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "mediandist", "cvdist")
+p1<-AllCountStats.r2r.dist %>%
+  select(same, meanCFUCohenD, cvdist, meanCFUdist, mediandist) %>%
+  pivot_longer(., cols = c(meanCFUCohenD, meanCFUdist, mediandist, cvdist), names_to = "Var", values_to = "Value") %>%
+  mutate(Var=factor(Var, levels=c("meanCFUdist", "meanCFUCohenD", "mediandist", "cvdist")) ) %>%
   ggplot(aes(x=same, y=Value, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	theme_classic() + 
@@ -761,12 +779,16 @@ AllCountStats.r2r.dist %>%
         legend.position="none", 
         plot.title=element_text(hjust=0.5, size=16)) +
   labs(title="", y="Distance")+
-  facet_wrap(vars(Var), scales="free_y")+
+  facet_wrap(vars(Var), scales="free_y", ncol=2, labeller=labeller(Var=my.labs))+
   stat_compare_means(label.y = -0.5, label.x=1.2)
+p1
 
-AllCountStats.r2r.dist %>%
-  select(same, meanCFUCohenD, kurtdist, Q1dist) %>%
-  pivot_longer(., cols = c(meanCFUCohenD, kurtdist, Q1dist), names_to = "Var", values_to = "Value") %>%
+my.labs<-c("Q1", "Kurtosis")
+names(my.labs)=c("Q1dist", "kurtdist")
+p2<-AllCountStats.r2r.dist %>%
+  select(same, kurtdist, Q1dist) %>%
+  pivot_longer(., cols = c(Q1dist, kurtdist), names_to = "Var", values_to = "Value") %>%
+  mutate(var=factor(Var, levels=c("Q1dist", "kurtdist"))) %>%
   ggplot(aes(x=same, y=Value, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	theme_classic() + 
@@ -775,12 +797,16 @@ AllCountStats.r2r.dist %>%
         legend.position="none", 
         plot.title=element_text(hjust=0.5, size=16)) +
   labs(title="", y="Distance")+
-  facet_wrap(vars(Var), scales="free_y")+
+  facet_wrap(vars(Var), scales="free_y", ncol=2, labeller=labeller(Var=my.labs))+
   stat_compare_means(label.y = -5, label.x=1.2)
+p2
 
-AllCountStats.r2r.dist %>%
+my.labs<-c("Skewness", "Q2")
+names(my.labs)=c("skewdist", "Q2dist")
+p3<-AllCountStats.r2r.dist %>%
   select(same, Q2dist, skewdist) %>%
-  pivot_longer(., cols = c(Q2dist, skewdist), names_to = "Var", values_to = "Value") %>%
+  pivot_longer(., cols = c(skewdist, Q2dist), names_to = "Var", values_to = "Value") %>%
+  mutate(var=factor(Var, levels=c("Q2dist", "skewdist"))) %>%
   ggplot(aes(x=same, y=Value, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	theme_classic() + 
@@ -789,66 +815,41 @@ AllCountStats.r2r.dist %>%
         legend.position="none", 
         plot.title=element_text(hjust=0.5, size=16)) +
   labs(title="", y="Distance")+
-  facet_wrap(vars(Var), scales="free_y")+
+  facet_wrap(vars(Var), scales="free_y", ncol=2, labeller=labeller(Var=my.labs))+
   stat_compare_means(label.y = -1, label.x=1.2)
+p3
 
-pAll8MeanCFUdist<-AllCountStats.r2r.dist %>%
-  ggplot(aes(x=same, y=meanCFUdist, color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  stat_compare_means(label.y = 0.99, label.x=1.2) +
-  labs(title="", y="dist(Mean CFU)")
-pAll8MeanCFUdist
-ggsave("pAll8MeanCFUdist.png", width=6, height=4, units="in", dpi=300)
+plot_grid(p1, p2, p3, ncol=1, rel_heights = c(2,1,1))
 
+#pAll8MeanCFUdist<-AllCountStats.r2r.dist %>%
+#  ggplot(aes(x=same, y=meanCFUdist, color=same))+
+#  geom_jitter(shape=16, position=position_jitter(0.05)) +
+#  geom_boxplot(fill=NA) +	theme_classic() + 
+#  theme(text=element_text(size=14), 
+#        axis.title.x = element_blank(), 
+#        legend.position="none", 
+#        plot.title=element_text(hjust=0.5, size=16)) +
+#  stat_compare_means(label.y = 0.99, label.x=1.2) +
+#  labs(title="", y="dist(Mean CFU)")
+#pAll8MeanCFUdist
+#ggsave("pAll8MeanCFUdist.png", width=6, height=4, units="in", dpi=300)
 
-pAll8cvCFUdist<-All8.big.r2r.dist %>%
-  ggplot(aes(x=same, y=cvdist, color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  stat_compare_means(label.y = 2.6, label.x=1.5) +
-  labs(title="", y="dist(CV)")
-pAll8cvCFUdist
-
-pAll8SkewCFUdist<-All8.big.r2r.dist %>%
-  ggplot(aes(x=same, y=skewdist, color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-  stat_compare_means(label.y = 4.3, label.x=1.5) +
-  labs(title="", y="dist(Skew)")
-pAll8SkewCFUdist
-
-pAll8KurtCFUdist<-All8.big.r2r.dist %>%
-  ggplot(aes(x=same, y=kurtdist, color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-  stat_compare_means(label.y = 17, label.x=1.5) +
-  labs(title="", y="dist(Kurt)")
-pAll8KurtCFUdist
 
 #~~~~~~   FIGURE 3?
 #~~~  Plot out only the comparisons of moments
-plot_grid(pAll8MeanCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist,
-          pAll8cvCFUdist, pAll8SkewCFUdist, pAll8KurtCFUdist, 
-          labels="AUTO", ncol=2)
-ggsave("pMomentsCFUdist.png", width=7, height=9, units="in", dpi=300)
+rm(pAll8cvCFUdist, pAll8KurtCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist, pAll8SkewCFUdist)
+ggsave("pAll8SelectMomentsSummaryDistance.png", width=12, height=12, units="in", dpi=400)
+
+#plot_grid(pAll8MeanCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist,
+#          pAll8cvCFUdist, pAll8SkewCFUdist, pAll8KurtCFUdist, 
+#          labels="AUTO", ncol=2)
+#ggsave("pMomentsCFUdist.png", width=7, height=9, units="in", dpi=300)
 #ggsave("pAll8MeanCFUdist.png", width=6, height=4, units="in", dpi=300)
 
 ## Plotting summary statistics along with their comparisons
-plot_grid(pmeanCFU, pcvCFU, pskewCFU, pkurtCFU, 
-          pAll8MeanCFUdist, pAll8cvCFUdist, pAll8SkewCFUdist, pAll8KurtCFUdist, 
-          ncol=4, nrow=2, labels="AUTO")
-ggsave("pAll8SelectMomentsSummaryDistance.png", width=12, height=6, units="in", dpi=300)
+#plot_grid(pmeanCFU, pcvCFU, pskewCFU, pkurtCFU, 
+#          pAll8MeanCFUdist, pAll8cvCFUdist, pAll8SkewCFUdist, pAll8KurtCFUdist, 
+#          ncol=4, nrow=2, labels="AUTO")
 
 wilcox.test(meanCFUdist~same, data=All8.big.r2r.dist)
 wilcox.test(cvdist~same, data=All8.big.r2r.dist)
