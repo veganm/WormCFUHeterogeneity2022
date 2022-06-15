@@ -823,7 +823,7 @@ p3
 #~~~  Plot out only the comparisons of moments
 # rm(pAll8cvCFUdist, pAll8KurtCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist, pAll8SkewCFUdist)
 plot_grid(p1, p2, p3, ncol=1, rel_heights = c(2,1,1))
-ggsave("pAll8SelectMomentsSummaryDistance.png", width=12, height=12, units="in", dpi=400)
+ggsave("pAll8SelectMomentsSummaryDistance.png", width=9, height=12, units="in", dpi=400)
 
 
 #pAll8MeanCFUdist<-AllCountStats.r2r.dist %>%
