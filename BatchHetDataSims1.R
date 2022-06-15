@@ -788,7 +788,7 @@ names(my.labs)=c("Q1dist", "kurtdist")
 p2<-AllCountStats.r2r.dist %>%
   select(same, kurtdist, Q1dist) %>%
   pivot_longer(., cols = c(Q1dist, kurtdist), names_to = "Var", values_to = "Value") %>%
-  mutate(var=factor(Var, levels=c("Q1dist", "kurtdist"))) %>%
+  mutate(Var=factor(Var, levels=c("Q1dist", "kurtdist"))) %>%
   ggplot(aes(x=same, y=Value, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	theme_classic() + 
@@ -804,9 +804,9 @@ p2
 my.labs<-c("Skewness", "Q2")
 names(my.labs)=c("skewdist", "Q2dist")
 p3<-AllCountStats.r2r.dist %>%
-  select(same, Q2dist, skewdist) %>%
+  select(same, skewdist, Q2dist ) %>%
   pivot_longer(., cols = c(skewdist, Q2dist), names_to = "Var", values_to = "Value") %>%
-  mutate(var=factor(Var, levels=c("Q2dist", "skewdist"))) %>%
+  mutate(Var=factor(Var, levels=c("Q2dist", "skewdist"))) %>%
   ggplot(aes(x=same, y=Value, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	theme_classic() + 
@@ -819,7 +819,12 @@ p3<-AllCountStats.r2r.dist %>%
   stat_compare_means(label.y = -1, label.x=1.2)
 p3
 
+#~~~~~~   FIGURE 3?
+#~~~  Plot out only the comparisons of moments
+# rm(pAll8cvCFUdist, pAll8KurtCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist, pAll8SkewCFUdist)
 plot_grid(p1, p2, p3, ncol=1, rel_heights = c(2,1,1))
+ggsave("pAll8SelectMomentsSummaryDistance.png", width=12, height=12, units="in", dpi=400)
+
 
 #pAll8MeanCFUdist<-AllCountStats.r2r.dist %>%
 #  ggplot(aes(x=same, y=meanCFUdist, color=same))+
@@ -834,11 +839,6 @@ plot_grid(p1, p2, p3, ncol=1, rel_heights = c(2,1,1))
 #pAll8MeanCFUdist
 #ggsave("pAll8MeanCFUdist.png", width=6, height=4, units="in", dpi=300)
 
-
-#~~~~~~   FIGURE 3?
-#~~~  Plot out only the comparisons of moments
-rm(pAll8cvCFUdist, pAll8KurtCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist, pAll8SkewCFUdist)
-ggsave("pAll8SelectMomentsSummaryDistance.png", width=12, height=12, units="in", dpi=400)
 
 #plot_grid(pAll8MeanCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist,
 #          pAll8cvCFUdist, pAll8SkewCFUdist, pAll8KurtCFUdist, 
