@@ -42,15 +42,37 @@ SeBleachCount[SeBleachCount=="B"]<-"Bleach"
 SeBleachCount[SeBleachCount=="NB"]<-"NoBleach"
 SeBleachCount$Condition<-as.factor(SeBleachCount$Condition)
 
-#SeBleachCount[SeBleachCount==20210315]<-1 #replace experiment date with day ID
-#SeBleachCount[SeBleachCount==20210308]<-2
-SeBleachCount$Date<-as.factor(SeBleachCount$Date)
+# let's combine the SE data with the single worm data (n=22) from the batch digest run
+# now we have three replicates on different days
+temp<-subset(BatchDigests, Species=="SE" & Batch==1)
+#length(temp$Batch)
+tempSE<-data.frame(Condition=rep("Bleach", 22), Date=rep("20220218", 22), Count = temp$CFU, logCount=temp$logCFU, Species=rep("SE", 22))
+SeCount<-rbind(SeBleachCount, tempSE)
+rm(tempSE)
+unique(SeCount$Date)
+SeCount[SeCount=="20210308"]<-2
+SeCount[SeCount=="20210315"]<-1
+SeCount[SeCount=="20220218"]<-3
+SeCount$Date<-as.factor(SeCount$Date)
 
+#take out the zeros
+SeCount[SeCount==0]<-NA
+SeCount2<-SeCount[complete.cases(SeCount),]
+
+# do the same for the S. aureus data
 SaBleachCount<-read.table("SaBleach.txt", header=TRUE)  
 SaBleachCount$logCount<-log10(SaBleachCount$Count+1) #zero correct  
 SaBleachCount[SaBleachCount=="B"]<-"Bleach"
 SaBleachCount[SaBleachCount=="NB"]<-"NoBleach"
 SaBleachCount$Condition<-as.factor(SaBleachCount$Condition)
+SaBleachCount[SaBleachCount=="20210212"]<-1
+SaBleachCount[SaBleachCount=="20210207"]<-2
+SaBleachCount[SaBleachCount=="20210623"]<-3
+SaBleachCount$Date<-as.factor(SaBleachCount$Date)
+# censor out zeros
+SaBleachCount2<-SaBleachCount
+SaBleachCount2[SaBleachCount2==0]<-NA
+SaBleachCount2<-SaBleachCount[complete.cases(SaBleachCount2),]
 
 pSaBleachCount<-ggplot(SaBleachCount, aes(x=Condition, y=logCount, color=Condition)) + geom_jitter(shape=16, position=position_jitter(0.05)) 
 p1<-pSaBleachCount + geom_violin(fill=NA) + ylim(-0.1,6)+ theme_classic() + theme(text=element_text(size=14), axis.title.x = element_blank(), plot.title=element_text(hjust=0.5)) +labs(title=expression(paste(italic("S. aureus"), " MSSA Newman")), y="log10(CFU/worm)")
@@ -69,6 +91,42 @@ pSeByDay<- SeBleachCount %>%
 	labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
 pSeByDay
 #ggsave("pSeByDay.png",width=4, height=3, units="in", dpi=300)
+
+# plot out the S. enterica zero-censored data
+pSEsingle<-SeCount2 %>%
+  ggplot(aes(x=Date, y=logCount, color=Date)) + 
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_violin(fill=NA) + 
+  theme_classic() + 
+  theme(text=element_text(size=16), 
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size=12),
+        plot.title=element_text(hjust=0.5, size=14),
+        legend.position = "none") + 
+  labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
+pSEsingle
+ggsave("pSEsingle.png", width=4, height=3, units="in", dpi=300)
+
+#another version of this plot with the combined data (all 3 days)
+mylen<-dim(SeCount2)[1]
+SeTemp<-rbind(SeCount2, data.frame(Condition=SeCount2$Condition,
+                                   Date=rep("All", mylen),
+                                   Count=SeCount2$Count,
+                                   logCount=SeCount2$logCount,
+                                   Species=SeCount2$Species
+))
+pSeCountAll<-ggplot(SeTemp, aes(x=Date, y=logCount, color=Date)) +
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_violin(fill=NA) + 
+  theme_classic() + 
+  theme(text=element_text(size=14), 
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
+        plot.title=element_text(hjust=0.5, size=14)) + 
+  labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
+pSeCountAll
+ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
+
 
 # here we will call the wormboot function (wormboot.R)
 # to generate simulated data and make comparisons
@@ -166,236 +224,19 @@ wilcox.test(SeBoot1$data[SeBoot1$batch==50], SeBoot2$data[SeBoot2$batch==50])
 # Plot out SE bootstraps together with real data from S. aureus batch size experiment
 plot_grid(pBatchSA, pBoot1, pBoot2, pBoot3, pBoot4, labels="AUTO", ncol=5,  rel_widths=c(1.5, 1,1,1,1), align="h")
 #ggsave("pjointSeBoot.svg", width=9, height=4, units="in", dpi=300)
-ggsave("pSaBatchJointSeBoot.png", width=10, height=4, units="in", dpi=300)
+ggsave("Fig1_pSaBatchJointSeBoot.png", width=10, height=4, units="in", dpi=400)
 
-#pBatchSE<-subset(BatchDigests, Species=="SE") %>%
-#	ggplot(aes(x=Batch, y=logCFU, color=Batch)) + 
-#	geom_jitter(shape=16, position=position_jitter(0.05)) +
-#	geom_violin(fill=NA) + 
-#	theme_classic() + 
-#	theme(text=element_text(size=16), 
-#	axis.title.x = element_blank(), 
-#	plot.title=element_text(hjust=0.5, size=14),
-#	legend.position=c(0.8,0.2)) + 
-#	labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
-#pBatchSE
-
+# and some summary statistics for the record
 mean(BatchDigests$CFU[BatchDigests$Species=="SA" & BatchDigests$Batch==1 ])
 median(BatchDigests$CFU[BatchDigests$Species=="SA" & BatchDigests$Batch==1 ])
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# S. enterica and S. aureus bleach experiment data and simulations thereof
-library(mclust, quietly=TRUE)
-library(sBIC)
-
-# let's combine the SE data with the single worm data (n=22) from the batch digest run
-# now we have three replicates on different days
-temp<-subset(BatchDigests, Species=="SE" & Batch==1)
-#length(temp$Batch)
-tempSE<-data.frame(Condition=rep("Bleach", 22), Date=rep("20220218", 22), Count = temp$CFU, logCount=temp$logCFU, Species=rep("SE", 22))
-SeCount<-rbind(SeBleachCount, tempSE)
-rm(tempSE)
-unique(SeCount$Date)
-SeCount[SeCount=="20210308"]<-2
-SeCount[SeCount=="20210315"]<-1
-SeCount[SeCount=="20220218"]<-3
-SeCount$Date<-as.factor(SeCount$Date)
-
-#take out the zeros
-SeCount[SeCount==0]<-NA
-SeCount2<-SeCount[complete.cases(SeCount),]
-
-# do the same for the S. aureus data
-SaBleachCount[SaBleachCount=="20210212"]<-1
-SaBleachCount[SaBleachCount=="20210207"]<-2
-SaBleachCount[SaBleachCount=="20210623"]<-3
-SaBleachCount$Date<-as.factor(SaBleachCount$Date)
-# censor out zeros
-SaBleachCount2<-SaBleachCount
-SaBleachCount2[SaBleachCount2==0]<-NA
-SaBleachCount2<-SaBleachCount[complete.cases(SaBleachCount2),]
-
-pSEsingle<-SeCount2 %>%
-	ggplot(aes(x=Date, y=logCount, color=Date)) + 
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 
-	theme_classic() + 
-	theme(text=element_text(size=16), 
-	axis.title.x = element_blank(), 
-	axis.text.x = element_text(size=12),
-	plot.title=element_text(hjust=0.5, size=14),
-	legend.position = "none") + 
-	labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
-pSEsingle
-ggsave("pSEsingle.png", width=4, height=3, units="in", dpi=300)
-
-#another version of this plot with the combined data (all 3 days)
-mylen<-dim(SeCount2)[1]
-SeTemp<-rbind(SeCount2, data.frame(Condition=SeCount2$Condition,
-                                     Date=rep("All", mylen),
-                                     Count=SeCount2$Count,
-                                     logCount=SeCount2$logCount,
-                                     Species=SeCount2$Species
-                                     ))
-pSeCountAll<-ggplot(SeTemp, aes(x=Date, y=logCount, color=Date)) +
-    geom_jitter(shape=16, position=position_jitter(0.05)) +
-    geom_violin(fill=NA) + 
-    theme_classic() + 
-    theme(text=element_text(size=14), 
-          axis.title.x = element_blank(), 
-          axis.text.x = element_blank(),
-          plot.title=element_text(hjust=0.5, size=14)) + 
-    labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
-pSeCountAll
-ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
-
-#ok let's try some gaussian mixture models (code from vignette)
-X<-SeCount2$logCount
-mean(X)
-var(X)
-mean(SeCount2$Count)
-sd(SeCount2$Count)
-
-fit<- mclustBIC(X)
-# Best BIC values:
-#           V,2        E,2         E,3
-#BIC      -251.966 -252.38286 -258.396880
-#BIC diff    0.000   -0.41682   -6.430838
-
-plot(fit)
-
-# fitting a model with two components, allowing variances to be unequal ("V")
-fit2 <- Mclust(X, G=2, model="V")
-summary(fit2)
-plot(fit2, what="density", main="G2", xlab="logCFU")
-rug(X)
-fit2$parameters
-#(mean1, var1)=(2.985569, 0.4568056) and (mean2, var2)=(4.742767, 0.1239928), containing 58% and 42% of the mass respectively
-# let's put these plots together with the Se data plot
-
-X1<-SeCount2$logCount[SeCount2$Date==1]
-fit1 = Mclust(X1, G=2, model="V")
-summary(fit1)
-plot(fit1, what="density", main="G2", xlab="logCFU")
-rug(X1)
-fit1$parameters
-#(mean1, var1)=(2.777394, 0.34993190) and (mean2, var2)=(4.753665, 0.05852001), containing 59.4% and 40.6% of the mass respectively
-
-X2<-SeCount2$logCount[SeCount2$Date==2]
-fit2 = Mclust(X2, G=2, model="V")
-fit2$parameters
-#(mean1, var1)=(2.774017, 0.09134093) and (mean2, var2)=(4.319905, 0.32749870), containing 42.6% and 57.3% of the mass respectively
-
-X3<-SeCount2$logCount[SeCount2$Date==3]
-fit3 = Mclust(X3, G=2, model="V")
-#summary(fit3)
-#plot(fit3, what="density", main="G2", xlab="logCFU")
-#rug(X3)
-fit3$parameters
-#(mean1, var1)=(3.680638, 0.97808089) and (mean2, var2)=(4.905500, 0.03381337), containing 67.2% and 32.8% of the mass respectively
-
-#library(sBIC)
-gMix = GaussianMixtures(maxNumComponents=10, phi=1, restarts=100)
-set.seed(1234)
-m = sBIC(X, gMix)
-print(m)
-matplot(
-	cbind(m$BIC - m$BIC[1], m$sBIC - m$sBIC[1]),
-	pch = c(1, 3),
-	col = "black",
-	xlab = "Number of components",
-	ylab = expression(BIC - BIC(M[1])),
-	las=1, xaxt="n"
-	)
-axis(1, at = 1:10)
-legend("bottomleft",
-c(expression(BIC), expression(bar(sBIC)[1])),
-pch = c(1, 3),
-y.intersp = 1.2)
-#ggsave("pSE_GMM_BICvsBIC.png", width=4, height=3, units="in", dpi=300)
-
-# Using the all-SE 2-mode GMM, we can generate simulated data
-# Note that we are allowing the weight in modes to be stochastic (binomial) 
-SeBootGMM<-wormbootGMM(100, 50, 2.985569, 0.4568056, 4.742767, 0.1239928, 0.58, 0)
-SeBootGMM$set<-as.factor(SeBootGMM$set)
-SeBootGMM$batch<-as.factor(SeBootGMM$batch)
-
-SeBootGMM.1.2<-wormbootGMM(100, 50, 2.985569, 0.4568, 4.742767, 0.12399, 0.57, 0.15)
-SeBootGMM.1.2$set<-as.factor(SeBootGMM.1.2$set)
-SeBootGMM.1.2$batch<-as.factor(SeBootGMM.1.2$batch)
-
-SeBootGMM.1.2.05<-wormbootGMM(100, 50, 2.985569, 0.4568, 4.742767, 0.12399, 0.57, 0.05)
-
-pSimSeGMM1<- subset(SeBootGMM.1.2, batch==1) %>%
-	ggplot(aes(x=set, y=logCount, color=set))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 
-	ylim(-0.1,6) +
-	theme_classic() + 
-	theme(text=element_text(size=16), 
-	axis.title.x = element_blank(), 
-	plot.title=element_text(hjust=0.5, size=16),
-	legend.position="none"
-	) + 
-	labs(title="1", y="log10(CFU/worm)")
-#pSimSeGMM1
-pSimSeGMM5<- subset(SeBootGMM.1.2, batch==5) %>%
-	ggplot(aes(x=set, y=logCount, color=set))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 
-	ylim(-0.1,6) +
-	theme_classic() + 
-	theme(text=element_text(size=16), 
-	axis.title.x = element_blank(), 
-	plot.title=element_text(hjust=0.5, size=16),
-	legend.position="none"
-	) + 
-	labs(title="5", y="")
-pSimSeGMM10<- subset(SeBootGMM.1.2, batch==10) %>%
-	ggplot(aes(x=set, y=logCount, color=set))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 
-	ylim(-0.1,6) +
-	theme_classic() + 
-	theme(text=element_text(size=16), 
-	axis.title.x = element_blank(), 
-	plot.title=element_text(hjust=0.5, size=16),
-	legend.position="none"
-	) + 
-	labs(title="10", y="")
-pSimSeGMM20<- subset(SeBootGMM.1.2, batch==20) %>%
-	ggplot(aes(x=set, y=logCount, color=set))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 
-	ylim(-0.1,6) +
-	theme_classic() + 
-	theme(text=element_text(size=16), 
-	axis.title.x = element_blank(), 
-	plot.title=element_text(hjust=0.5, size=16),
-	legend.position="none"
-	) + 
-	labs(title="20", y="")
-pSimSeGMM50<- subset(SeBootGMM.1.2, batch==50) %>%
-	ggplot(aes(x=set, y=logCount, color=set))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 
-	ylim(-0.1,6) +
-	theme_classic() + 
-	theme(text=element_text(size=16), 
-	axis.title.x = element_blank(), 
-	plot.title=element_text(hjust=0.5, size=16),
-	legend.position=c(0.8,0.2)) + 
-	labs(title="50", y="")
-plot_grid(pSimSeGMM1, pSimSeGMM5, pSimSeGMM10, pSimSeGMM20, pSimSeGMM50, labels="AUTO", ncol=5, align="h")
-ggsave("pSimSeGMM_day1v2.png", width=9, height=4, units="in", dpi=300)
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~                 FIGURE 2
 #~~~~    WITHIN AND BETWEEN REPLICATE HETEROGENEITY OF CFUS
-#~~~~
-# pull in the all-8 data set so we can describe run to run variation
+#
+# First, pull in the all-8 data set so we can describe run to run variation
 # just need the total counts for this
 
 All8<-read.table("All8.txt", header=TRUE)
@@ -406,44 +247,6 @@ All8[All8=="decc1"]<-"dec1"
 All8$logTotal[is.infinite(All8$logTotal)]<-NA
 All8<-All8[complete.cases(All8),]
 
-# find hosts with sufficient runs
-temp<-integer()
-for (i in 1:length(hosts)){
-	temp[i]<-length(unique(All8$Date[All8$Host==hosts[i]]))}
-temp
-#5  2  4  4  2  5  6  5  1  1  1 11  5  3
-hosts
-#"AU37"   "ctls40" "daf16"  "daf2"   "dbl1"   "decc1"  "eat14"  "exp1"   "glp1"   "glp4"   "hsf1"   "N2"  "phm2"   "vhp1" 
-bighosts<-hosts[temp>=5]
-#"AU37"  "daf2"  "dec1" "eat14" "exp1"  "N2"    "phm2" 
-# these have at least five runs
-All8b<-subset(All8, Host=="AU37" | Host=="daf2" | Host=="dec1" | Host=="eat14" | Host=="exp1" | Host=="N2" | Host=="phm2")
-All8b$Date<-as.factor(All8b$Date)
-
-pAll8b<-All8b %>%
-	ggplot(aes(x=as.factor(Host), y=logTotal, color=as.factor(Host)))+
-	geom_jitter(shape=16, position=position_jitter(0.05)) +
-	geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-	theme(text=element_text(size=14), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="Minimal Microbiome Totals", y="log10(CFU/Worm)")
-pAll8b
-#ggsave("pAll8LogTotal.png", width=6, height=4, units="in", dpi=300)
-
-# Plot out individual replicates by host genotype
-All8b%>%
-  ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        axis.text.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  labs(title="Minimal community colonization, by replicate", y=expression(log[10](CFU/Worm))) +
-  facet_wrap(~Host, scales="free_x", ncol=4)
-#ggsave("pAll8LogCFUHostByDay.png", width=7, height=10, units="in", dpi=300)
-
-# turns out a lot of the early runs were low n
-# not great for quantifying heterogeneity
 # filter the original data set to remove anything with <18 measurements per strain on a given day
 temp<-unique(All8$Host)
 All8.temp<-All8
@@ -523,7 +326,7 @@ pAll8.big.byHost<-All8.big%>%
 pAll8.big.byHost
 ggsave("pAll8BigLogCFUHostByDay.png", width=12, height=9, units="in", dpi=300)
 
-
+# Plot out the log-transformed CFU data by host genotype, replicates combined
 pAll8.big<-All8.big %>%
 	ggplot(aes(x=as.factor(Host), y=logTotal, color=as.factor(Host)))+
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
@@ -532,15 +335,32 @@ pAll8.big<-All8.big %>%
 	labs(title="Minimal Microbiome Totals", y=expression(log[10](CFU/Worm)))
 pAll8.big
 
+# 2022-06-03: bringing in single worm data from NRRL1 evolution paper
+NRRL1counts<-read_csv("NRRL1counts.csv")
+names(NRRL1counts)
+#[1] "Condition" "CFU"       "logCFU"    "Date"
+NRRL1counts$Date<-as.character(NRRL1counts$Date)
+
+#as before loop over experiment (Condition) and rep (Date) and record
+hosts2<-unique(NRRL1counts$Condition) #length 24
+
+# Only mono-colonization by MO.I2.9 (hosts[10]) has 2 reps of >18 (both n=24)
+# subset out & prep for rbind
+hosts2[10]
+MOcount<-subset(NRRL1counts, Condition==hosts2[10], select=c("Condition", "Date", "CFU", "logCFU")) %>%
+  rename("Host"="Condition",
+         "Total"="CFU",
+         "logTotal"="logCFU") %>%
+  as_tibble()
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-########## OK now we are going to take a WHOLE BUNCH of summary stats and see what we get
+# OK now we are going to take a WHOLE BUNCH of summary stats and see what we get
 
 AllCounts<-as_tibble(subset(All8.big, select=c("Host", "Date", "Total", "logTotal")))
 names(AllCounts)
 
-# Incorporate the pathogen colonization data
+# Incorporate the pathogen colonization data: prep for rbind
 SeCount<-SeCount[complete.cases(SeCount),]
 SeCount$Host<-"SE"
 SaBleachCount2$Host<-"SA"
@@ -553,29 +373,8 @@ SaCount2<-subset(SaBleachCount2, select=c("Host", "Date", "Count", "logCount")) 
          "logTotal"="logCount") %>%
   as_tibble()
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# 2022-06-03: bringing in single worm data from NRRL1
-# note: took out CG mono-colonization data, too sparse
-# and CG pairs, most had only one day & all had few points
-
-NRRL1counts<-read_csv("NRRL1counts.csv")
-names(NRRL1counts)
-#[1] "Condition" "CFU"       "logCFU"    "Date"
-NRRL1counts$Date<-as.character(NRRL1counts$Date)
-
-#as before loop over experiment (Condition) and rep (Date) and record
-hosts2<-unique(NRRL1counts$Condition) #length 24
-
-#Only SSP colonization by MO.I2.9 (hosts[10]) has 2 reps of >18 (both n=24)
-hosts2[10]
-MOcount<-subset(NRRL1counts, Condition==hosts2[10], select=c("Condition", "Date", "CFU", "logCFU")) %>%
-  rename("Host"="Condition",
-         "Total"="CFU",
-         "logTotal"="logCFU") %>%
-  as_tibble()
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Merge everything
+# Merge all the single-worm CFU data
 AllCounts<-rbind(AllCounts, SaCount2, SeCount2, MOcount) %>%
   rename("Condition"="Host")
 
@@ -606,9 +405,9 @@ AllCountsStats.r2r <- data.frame(Condition=character(),
 
 for (i in seq_along(conditions.big)){
 	temp<-unique(AllCounts$Date[AllCounts$Condition==conditions.big[i]])
-#	print(conditions.big[i])
+#	print(conditions.big[i]) # for debugging
 	for (j in seq_along(temp)){
-#		print(temp[j])
+#		print(temp[j]) # for debugging
 		tempCFU<-sort(AllCounts$Total[AllCounts$Condition==conditions.big[i] & AllCounts$Date==temp[j]])
 		myq<-as.double(quantile(tempCFU, probs=c(0.1, 0.25, 0.5, 0.75, 0.9)))
 		# get values for Hogg's calculations
@@ -649,30 +448,30 @@ AllCountsStats.r2r$cvCFU<-sqrt(AllCountsStats.r2r$varCFU)/AllCountsStats.r2r$mea
 #write summary stats to table
 write.table(AllCountsStats.r2r, "WormDataRunToRun.txt", sep="\t")
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# let's plot out single worm statistics
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# let's plot out the data and statistics by experimental condition
 # first create new facet labels
 condition.labs<-c("N2","AU37", "daf-16", "daf-2", "dbl-1", "dec-1", "exp-1", "vhp-1", "M. oxydans",  "S. aureus", "S. enterica")
 names(condition.labs)<-c("N2","AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "vhp1", "MO.I2.9",  "SA", "SE")
 
-AllCounts %>%
+pAllCounts<-AllCounts %>%
   mutate(Condition=factor(Condition, levels=c("N2","AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "vhp1", "MO.I2.9", "SA", "SE"))) %>%
   ggplot(aes(x=Date, y=logTotal, color=Date)) + 
   geom_point(shape=16, position=position_jitterdodge(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
-#  facet_wrap(~Condition, scales="free_x")+
- facet_wrap(~Condition, scales="free_x", labeller=labeller(Condition=condition.labs))+
+  facet_wrap(~Condition, scales="free_x", labeller=labeller(Condition=condition.labs))+
   theme(text=element_text(size=16), 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(),
-        plot.title=element_text(hjust=0.5, size=14),
+        #plot.title=element_text(hjust=0.5, size=14),
         legend.position = "none",
-        strip.text.x = element_text(size=12, face="italic"))
-  
-#~~~~~ FIGURE 2
-ggsave("pAll8BigSaSeCFUHostByDay.png", width=12, height=10, units="in", dpi=300)
+        strip.text.x = element_text(size=12, face="italic"))+
+  labs(y=expression(log[10](CFU/Worm)))
+#pAllCounts
+#~~~~~ this will be FIGURE 2A
+#ggsave("pAll8BigSaSeCFUHostByDay.png", width=12, height=10, units="in", dpi=300)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~ Plot out the moments by condition
@@ -683,7 +482,7 @@ AllCountStats.r2r<-AllCountsStats.r2r %>%
   mutate(logmeanCFU=log10(meanCFU),
          logq50=log10(q50))
 
-AllCountStats.r2r %>% 
+pAllCountStats<- AllCountStats.r2r %>% 
   select(Condition, logmeanCFU, skewCFU, kurtCFU, Q1, Q2, cvCFU, logq50) %>%
   pivot_longer(., cols = c(logmeanCFU, skewCFU, kurtCFU, Q1, Q2, cvCFU, logq50), names_to = "Var", values_to = "Value") %>%
   ggplot(aes(x=Condition, y=Value, color=Condition))+
@@ -695,9 +494,9 @@ AllCountStats.r2r %>%
         axis.title.x = element_blank(), 
         legend.position="none", 
         plot.title=element_text(hjust=0.5, size=16)) +
-  facet_wrap(vars(Var), scales="free_y")
-  
-ggsave("pComparingMomentsRunToRunWormCFU.png", width=14, height=10, units="in", dpi=300)
+  facet_wrap(vars(Var), scales="free_y", ncol=4)
+#ggsave("pRawMomentsRunToRunWormCFU.png", width=14, height=8, units="in", dpi=300)
+pAllCountStats
 
 ### cool. Now let's do the pairwise comparisons
 npairs<-dim(AllCountStats.r2r)[1]
@@ -764,13 +563,14 @@ AllCountStats.r2r.dist$same<-as.factor(AllCountStats.r2r.dist$same)
 AllCountStats.r2r.dist
 AllCountStats.r2r.dist[idx,]
 
-# and plot out
-my.labs<-c("Mean CFU", "Cohen's D", "Median", "CV")
-names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "mediandist", "cvdist")
-p1<-AllCountStats.r2r.dist %>%
-  select(same, meanCFUCohenD, cvdist, meanCFUdist, mediandist) %>%
-  pivot_longer(., cols = c(meanCFUCohenD, meanCFUdist, mediandist, cvdist), names_to = "Var", values_to = "Value") %>%
-  mutate(Var=factor(Var, levels=c("meanCFUdist", "meanCFUCohenD", "mediandist", "cvdist")) ) %>%
+# and plot out comparisons of distances, same vs. different condition
+my.labs<-c("Mean CFU", "Cohen's D", "Median", "CV", "Q1", "Skewness", "Q2", "Kurtosis")
+names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "mediandist", "cvdist", "Q1dist","skewdist", "Q2dist", "kurtdist")
+pAllCountStats.r2r<-AllCountStats.r2r.dist %>%
+  pivot_longer(., cols = c(meanCFUCohenD, meanCFUdist, mediandist, cvdist, Q1dist, skewdist, Q2dist, kurtdist), 
+               names_to = "Var", values_to = "Value") %>%
+  mutate(Var=factor(Var, 
+                    levels=c("meanCFUdist", "meanCFUCohenD", "mediandist", "cvdist", "Q1dist","skewdist", "Q2dist", "kurtdist")) ) %>%
   ggplot(aes(x=same, y=Value, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	theme_classic() + 
@@ -778,87 +578,29 @@ p1<-AllCountStats.r2r.dist %>%
         axis.title.x = element_blank(), 
         legend.position="none", 
         plot.title=element_text(hjust=0.5, size=16)) +
-  labs(title="", y="Distance")+
+  labs(title="", y="Distance between pairs")+
   facet_wrap(vars(Var), scales="free_y", ncol=2, labeller=labeller(Var=my.labs))+
-  stat_compare_means(label.y = -0.5, label.x=1.2)
-p1
+  stat_compare_means(label.x.npc = 0.5, label.y.npc=0.9, size=4)
+pAllCountStats.r2r
+#ggsave("pAll8SelectMomentsSummaryDistance.png", width=9, height=12, units="in", dpi=400)
 
-my.labs<-c("Q1", "Kurtosis")
-names(my.labs)=c("Q1dist", "kurtdist")
-p2<-AllCountStats.r2r.dist %>%
-  select(same, kurtdist, Q1dist) %>%
-  pivot_longer(., cols = c(Q1dist, kurtdist), names_to = "Var", values_to = "Value") %>%
-  mutate(Var=factor(Var, levels=c("Q1dist", "kurtdist"))) %>%
-  ggplot(aes(x=same, y=Value, color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  labs(title="", y="Distance")+
-  facet_wrap(vars(Var), scales="free_y", ncol=2, labeller=labeller(Var=my.labs))+
-  stat_compare_means(label.y = -5, label.x=1.2)
-p2
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~   FIGURE 2 ASSEMBLY
+plot_grid(pAllCounts, pAllCountStats.r2r, rel_widths=c(1, 1.2), labels="AUTO")
+ggsave("Fig2_AllCounts_logCFU_MomentDist.png", width=15, height=9, units="in")
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-my.labs<-c("Skewness", "Q2")
-names(my.labs)=c("skewdist", "Q2dist")
-p3<-AllCountStats.r2r.dist %>%
-  select(same, skewdist, Q2dist ) %>%
-  pivot_longer(., cols = c(skewdist, Q2dist), names_to = "Var", values_to = "Value") %>%
-  mutate(Var=factor(Var, levels=c("Q2dist", "skewdist"))) %>%
-  ggplot(aes(x=same, y=Value, color=same))+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
-  labs(title="", y="Distance")+
-  facet_wrap(vars(Var), scales="free_y", ncol=2, labeller=labeller(Var=my.labs))+
-  stat_compare_means(label.y = -1, label.x=1.2)
-p3
-
-#~~~~~~   FIGURE 3?
-#~~~  Plot out only the comparisons of moments
-# rm(pAll8cvCFUdist, pAll8KurtCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist, pAll8SkewCFUdist)
-plot_grid(p1, p2, p3, ncol=1, rel_heights = c(2,1,1))
-ggsave("pAll8SelectMomentsSummaryDistance.png", width=9, height=12, units="in", dpi=400)
-
-
-#pAll8MeanCFUdist<-AllCountStats.r2r.dist %>%
-#  ggplot(aes(x=same, y=meanCFUdist, color=same))+
-#  geom_jitter(shape=16, position=position_jitter(0.05)) +
-#  geom_boxplot(fill=NA) +	theme_classic() + 
-#  theme(text=element_text(size=14), 
-#        axis.title.x = element_blank(), 
-#        legend.position="none", 
-#        plot.title=element_text(hjust=0.5, size=16)) +
-#  stat_compare_means(label.y = 0.99, label.x=1.2) +
-#  labs(title="", y="dist(Mean CFU)")
-#pAll8MeanCFUdist
-#ggsave("pAll8MeanCFUdist.png", width=6, height=4, units="in", dpi=300)
-
-
-#plot_grid(pAll8MeanCFUdist, pAll8MeanCFUCohenD, pAll8q50CFUdist,
-#          pAll8cvCFUdist, pAll8SkewCFUdist, pAll8KurtCFUdist, 
-#          labels="AUTO", ncol=2)
-#ggsave("pMomentsCFUdist.png", width=7, height=9, units="in", dpi=300)
-#ggsave("pAll8MeanCFUdist.png", width=6, height=4, units="in", dpi=300)
-
-## Plotting summary statistics along with their comparisons
-#plot_grid(pmeanCFU, pcvCFU, pskewCFU, pkurtCFU, 
-#          pAll8MeanCFUdist, pAll8cvCFUdist, pAll8SkewCFUdist, pAll8KurtCFUdist, 
-#          ncol=4, nrow=2, labels="AUTO")
-
+# And some comparisons for the record
 wilcox.test(meanCFUdist~same, data=All8.big.r2r.dist)
 wilcox.test(cvdist~same, data=All8.big.r2r.dist)
 wilcox.test(skewdist~same, data=All8.big.r2r.dist)
 wilcox.test(kurtdist~same, data=All8.big.r2r.dist)
 
-#####################################################################
-####################################################################
-###########      FIGURE 5  MOMENTS      ##############################
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#                 FIGURE 5  MOMENTS      
 # ok back to beta starting at B(1,5) why not
 # without much loss of generality let's draw factors from a N(0,1)
 # each run
