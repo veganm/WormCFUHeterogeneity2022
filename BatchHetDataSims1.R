@@ -758,7 +758,7 @@ pTempBoot4
 plot_grid(pJointTemp1A, pTempBoot2A, pTempBoot3A, pTempBoot4A,
           pJointTemp1, pTempBoot2, pTempBoot3, pTempBoot4, labels="AUTO", ncol=4, nrow=2, align="h")
 #ggsave("pjointSeBoot.svg", width=9, height=4, units="in", dpi=300)
-ggsave("pjointFalseNegativeBoot.png", width=10, height=7, units="in", dpi=300)
+ggsave("Fig3_pjointFalseNegativeBoot.png", width=10, height=7, units="in", dpi=300)
 
 tempBoot1$Count<-as.double(10^tempBoot1$data)
 tempBoot2$Count<-as.double(10^tempBoot2$data)
