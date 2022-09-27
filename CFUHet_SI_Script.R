@@ -12,9 +12,11 @@ library(cowplot)
 library(mclust, quietly=TRUE)
 library(sBIC)
 
-# Using data for SE and SA with all three experimental runs, zeros removed, dates as integers 1-3
+# Using data for SE and SA with all experimental runs, zeros removed, dates as integers 1-3
+SeCount2<- SaSeCount2 %>%
+  filter(Condition=="SE")
 pSEsingle<-SeCount2 %>%
-  ggplot(aes(x=Date, y=logCount, color=Date)) + 
+  ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
@@ -23,55 +25,52 @@ pSEsingle<-SeCount2 %>%
         axis.text.x = element_text(size=12),
         plot.title=element_text(hjust=0.5, size=14),
         legend.position = "none") + 
-  labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
+  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)))
 pSEsingle
 ggsave("pSEsingle.png", width=4, height=3, units="in", dpi=300)
 
-#another version of this plot with the combined data (all 3 days)
-mylen<-dim(SeCount2)[1]
-SeTemp<-rbind(SeCount2, data.frame(Condition=SeCount2$Condition,
-                                   Date=rep("All", mylen),
-                                   Count=SeCount2$Count,
-                                   logCount=SeCount2$logCount,
-                                   Species=SeCount2$Species
-))
-pSeCountAll<-ggplot(SeTemp, aes(x=Date, y=logCount, color=Date)) +
+#another version of this plot with the combined data
+SeTemp<-SaSeTemp %>%
+  filter(Condition=="SE")
+
+pSeCountAll<-ggplot(SeTemp, aes(x=factor(Rep), y=logCFU, color=factor(Rep))) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(),
-        plot.title=element_text(hjust=0.5, size=14)) + 
-  labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
+        plot.title=element_text(hjust=0.5, size=14),
+        legend.title = element_blank()) + 
+  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)))
 pSeCountAll
 ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
 
 #ok let's try some gaussian mixture models (code from vignette)
-X<-SeCount2$logCount
+X<-SeCount2$logCFU
 mean(X)
 var(X)
-mean(SeCount2$Count)
-sd(SeCount2$Count)
+mean(SeCount2$CFU)
+sd(SeCount2$CFU)
 
 fit<- mclustBIC(X)
-# Best BIC values:
-#           V,2        E,2         E,3
-#BIC      -251.966 -252.38286 -258.396880
-#BIC diff    0.000   -0.41682   -6.430838
+fit
+#Top 3 models based on the BIC criterion: 
+#  E,2       V,2       E,1 
+#-174.8787 -177.0372 -180.1553 
 
 plot(fit)
 
-# fitting a model with two components, allowing variances to be unequal ("V")
-fit2 <- Mclust(X, G=2, model="V")
+# fitting a model with two components, allowing variances to be unequal ("V") or equal ("E")
+fit2 <- Mclust(X, G=2, model="E")
 summary(fit2)
 plot(fit2, what="density", main="G2", xlab="logCFU")
 rug(X)
 fit2$parameters
-#(mean1, var1)=(2.985569, 0.4568056) and (mean2, var2)=(4.742767, 0.1239928), containing 58% and 42% of the mass respectively
+#(mean1, var1)=(3.225159, 0.1877358) and (mean2, var2)=(4.662897, 0.1877358), containing 39% and 61% of the mass respectively
 # let's put these plots together with the Se data plot
 
-X1<-SeCount2$logCount[SeCount2$Date==1]
+X1<-SeCount2$logCFU[SeCount2$Rep==1]
 fit1 = Mclust(X1, G=2, model="V")
 summary(fit1)
 plot(fit1, what="density", main="G2", xlab="logCFU")
@@ -79,12 +78,12 @@ rug(X1)
 fit1$parameters
 #(mean1, var1)=(2.777394, 0.34993190) and (mean2, var2)=(4.753665, 0.05852001), containing 59.4% and 40.6% of the mass respectively
 
-X2<-SeCount2$logCount[SeCount2$Date==2]
+X2<-SeCount2$logCFU[SeCount2$Rep==2]
 fit2 = Mclust(X2, G=2, model="V")
 fit2$parameters
 #(mean1, var1)=(2.774017, 0.09134093) and (mean2, var2)=(4.319905, 0.32749870), containing 42.6% and 57.3% of the mass respectively
 
-X3<-SeCount2$logCount[SeCount2$Date==3]
+X3<-SeCount2$logCFU[SeCount2$Rep==3]
 fit3 = Mclust(X3, G=2, model="V")
 #summary(fit3)
 #plot(fit3, what="density", main="G2", xlab="logCFU")
