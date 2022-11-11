@@ -13,8 +13,6 @@ library(mclust, quietly=TRUE)
 library(sBIC)
 
 # Using data for SE and SA with all experimental runs, zeros removed, dates as integers 1-3
-SeCount2<- SaSeCount2 %>%
-  filter(Condition=="SE")
 pSEsingle<-SeCount2 %>%
   ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
@@ -33,6 +31,7 @@ ggsave("pSEsingle.png", width=4, height=3, units="in", dpi=300)
 SeTemp<-SaSeTemp %>%
   filter(Condition=="SE")
 
+SeTemp$Rep[SeTemp$Rep==0]<-"All"
 pSeCountAll<-ggplot(SeTemp, aes(x=factor(Rep), y=logCFU, color=factor(Rep))) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
@@ -61,15 +60,27 @@ fit
 
 plot(fit)
 
-# fitting a model with two components, allowing variances to be unequal ("V") or equal ("E")
+# Here we are still fitting to the combined Salmonella colonization data.
+# Fitting a model with two components, allowing variances to be unequal ("V") or equal ("E")
 fit2 <- Mclust(X, G=2, model="E")
 summary(fit2)
 plot(fit2, what="density", main="G2", xlab="logCFU")
 rug(X)
 fit2$parameters
 #(mean1, var1)=(3.225159, 0.1877358) and (mean2, var2)=(4.662897, 0.1877358), containing 39% and 61% of the mass respectively
-# let's put these plots together with the Se data plot
 
+# let's put these plots together with the Se data plot
+names(fit2)
+
+# easier to ggplot if we call to density? This will be the same model as above
+fit2d<-densityMclust(X, G=2)
+summary(fit2d)
+names(fit2d)
+glimpse(fit2d)
+rug(X)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# We can also look at each replicate individually
 X1<-SeCount2$logCFU[SeCount2$Rep==1]
 fit1 = Mclust(X1, G=2, model="V")
 summary(fit1)
