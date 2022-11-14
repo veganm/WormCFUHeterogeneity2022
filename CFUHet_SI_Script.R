@@ -1,14 +1,150 @@
-library(tidyverse)
-library(cowplot)
-
 #                Code for Supplementary Information
+#
+######################################################################
+# Function wormbootGMM
+wormbootGMM<-function(reps, batches, meanD, varD, meanU, varU, fUP, fDIFF){
+  # Script for generating log-scale fake data based on a Gaussian mixture model
+  # Prints p-values for t-tests and Mann-Whitney U tests in order of batch size
+  # Returns an example data frame of simulated data
+  # where "batch" is the number of individual measurements in the batch digest
+  # "Count" is CFU/worm, and "logCount" is the original log-scale simulated data
+  #"fUP" should be the larger of the fractions [0,1] of high-mode individuals
+  # and "fDIFF" is the difference in modal fraction across the two populations
+  fUPb<-fUP-fDIFF
+  mySDD<-sqrt(varD)
+  mySDU<-sqrt(varU)
+  pv1<-numeric(reps)
+  pv5<-numeric(reps)
+  pv10<-numeric(reps)
+  pv20<-numeric(reps)
+  pv50<-numeric(reps)
+  wpv1<-numeric(reps)
+  wpv5<-numeric(reps)
+  wpv10<-numeric(reps)
+  wpv20<-numeric(reps)
+  wpv50<-numeric(reps)
+  
+  for (j in 1:reps){
+    up<-sum(rbinom(batches,1, fUP))
+    down=batches-up
+    tempA<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+    tempA[tempA<1.3]<-0 
+    up<-sum(rbinom(batches,1, fUPb))
+    down=batches-up
+    tempB<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+    tempB[tempB<1.3]<-0 
+    # batch 5
+    temp5A<-numeric(batches)
+    temp5B<-numeric(batches)
+    temp10A<-numeric(batches)
+    temp10B<-numeric(batches)
+    temp20A<-numeric(batches)
+    temp20B<-numeric(batches)
+    temp50A<-numeric(batches)
+    temp50B<-numeric(batches)
+    
+    for(k in 1:batches){
+      up<-sum(rbinom(5, 1, fUP))
+      down=5-up
+      temp1<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      up<-sum(rbinom(5, 1, fUPb))
+      down=5-up
+      temp2<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      temp1[temp1<1.3]<-0
+      temp2[temp2<1.3]<-0
+      temp5A[k]<-log10(mean(10^temp1))
+      temp5B[k]<-log10(mean(10^temp2))
+      #now batch 10
+      up<-sum(rbinom(10, 1, fUP))
+      down=10-up
+      temp1<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      up<-sum(rbinom(10, 1, fUPb))
+      down=10-up
+      temp2<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      temp1[temp1<1.3]<-0
+      temp2[temp2<1.3]<-0
+      temp10A[k]<-log10(mean(10^temp1))
+      temp10B[k]<-log10(mean(10^temp2))
+      # batch 20
+      up<-sum(rbinom(20, 1, fUP))
+      down=20-up
+      temp1<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      up<-sum(rbinom(20, 1, fUPb))
+      down=20-up
+      temp2<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      temp1[temp1<1.3]<-0
+      temp2[temp2<1.3]<-0
+      temp20A[k]<-log10(mean(10^temp1))
+      temp20B[k]<-log10(mean(10^temp2))
+      #batch50
+      up<-sum(rbinom(50, 1, fUP))
+      down=50-up
+      temp1<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      up<-sum(rbinom(50, 1, fUPb))
+      down=50-up
+      temp2<-c(rnorm(down, mean=meanD, sd=mySDD), rnorm(up, mean=meanU, sd=mySDU))
+      temp1[temp1<1.3]<-0
+      temp2[temp2<1.3]<-0
+      temp50A[k]<-log10(mean(10^temp1))
+      temp50B[k]<-log10(mean(10^temp2))
+    }
+    
+    #t tests on log data
+    test1<-t.test(tempA, tempB)
+    test5<-t.test(temp5A, temp5B)
+    test10<-t.test(temp10A, temp10B)
+    test20<-t.test(temp20A, temp20B)
+    test50<-t.test(temp50A, temp50B)
+    
+    #Wilcoxon rank sum tests
+    wtest1<-wilcox.test(tempA,tempB)
+    wtest5<-wilcox.test(temp5A,temp5B)
+    wtest10<-wilcox.test(temp10A,temp10B)
+    wtest20<-wilcox.test(temp20A,temp20B)
+    wtest50<-wilcox.test(temp50A,temp50B)
+    
+    pv1[j]<-test1$p.value
+    pv5[j]<-test5$p.value
+    pv10[j]<-test10$p.value
+    pv20[j]<-test20$p.value
+    pv50[j]<-test50$p.value
+    
+    wpv1[j]<-wtest1$p.value
+    wpv5[j]<-wtest5$p.value
+    wpv10[j]<-wtest10$p.value
+    wpv20[j]<-wtest20$p.value
+    wpv50[j]<-wtest50$p.value
+  }
+  
+  pt<-c(sum(pv1<0.05)/reps, sum(pv5<0.05)/reps, sum(pv10<0.05)/reps, sum(pv20<0.05)/reps, sum(pv50<0.05)/reps)
+  pw<-c(sum(wpv1<0.05)/reps, sum(wpv5<0.05)/reps, sum(wpv10<0.05)/reps, sum(wpv20<0.05)/reps, sum(wpv50<0.05)/reps)
+  print(pt)
+  print(pw)
+  batch<-c(rep(1,batches), rep(5, batches), rep(10, batches), rep(20, batches), rep(50, batches))
+  dataA<-c(tempA, temp5A, temp10A, temp20A, temp50A)
+  dataB<-c(tempB, temp5B, temp10B, temp20B, temp50B)
+  frameA<-data.frame(batch, logCount=dataA)
+  frameA$set<-"A"
+  frameB<-data.frame(batch, logCount=dataB)
+  frameB$set<-"B"
+  mydata<-rbind(frameA, frameB)
+  mydata$Count<-10^mydata$logCount
+  return(mydata)
+}
+
+#########################################################################################
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #                       Section 1: 
 #            Multi-Modality in CFU/Worm Data
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # S. enterica and S. aureus bleach experiment data and simulations thereof
 # The objects called here are generated in the main text script
-# and the code calls the function "wormbootGMM()" from the script of the same name
+# and the code calls the function "wormbootGMM()"
+#library(tidyverse)
+#library(cowplot)
+
 library(mclust, quietly=TRUE)
 library(sBIC)
 
@@ -37,11 +173,11 @@ pSeCountAll<-ggplot(SeTemp, aes(x=factor(Rep), y=logCFU, color=factor(Rep))) +
   geom_violin(fill=NA) + 
   theme_classic() + 
   theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        axis.text.x = element_blank(),
+        #axis.title.x = element_blank(), 
+        #axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=14),
         legend.title = element_blank()) + 
-  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)))
+  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)), x="Replicate")
 pSeCountAll
 ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
 
@@ -79,28 +215,58 @@ names(fit2d)
 glimpse(fit2d)
 rug(X)
 
+# ok let's try ggplotting
+as.numeric(fit2d$data)
+fit2d_toplot<-tibble(logCFU=as.numeric(fit2d$data), density=as.numeric(fit2d$density))
+glimpse(fit2d_toplot)
+attach(fit2d_toplot)
+newdata<-fit2d_toplot[order(logCFU),]
+glimpse(newdata)
+detach(fit2d_toplot)
+
+pSeAllDensityMclust<-newdata %>%
+  ggplot(aes(x=logCFU, y=density))+
+  geom_line()+
+  geom_rug(sides="b")+
+  theme_classic() + 
+  theme(text=element_text(size=14), 
+        #axis.title.x = element_blank(), 
+        #axis.text.x = element_blank(),
+        plot.title=element_text(hjust=0.5, size=14),
+        legend.title = element_blank()) + 
+  labs(title=expression(paste(italic("S. enterica"), " LT2, All")), x=expression(log[10](CFU/Worm)), y="Density")
+pSeAllDensityMclust
+plot_grid(pSeCountAll, pSeAllDensityMclust, ncol=2, labels="AUTO", align="h")
+ggsave("FigS1_SentericaMclust.png", width=7, height=3, dpi=400, units="in")
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # We can also look at each replicate individually
 X1<-SeCount2$logCFU[SeCount2$Rep==1]
-fit1 = Mclust(X1, G=2, model="V")
+fit1<-mclustBIC(X1)
+fit1 # Best support for G=2, model E
+fit1 <- Mclust(X1, G=2, model="E")
 summary(fit1)
 plot(fit1, what="density", main="G2", xlab="logCFU")
 rug(X1)
 fit1$parameters
-#(mean1, var1)=(2.777394, 0.34993190) and (mean2, var2)=(4.753665, 0.05852001), containing 59.4% and 40.6% of the mass respectively
+#(mean1, var1)=(3.3866, 0.05795) and (mean2, var2)=(4.74495, 0.05795), containing 34.6% and 65.4% of the mass respectively
 
 X2<-SeCount2$logCFU[SeCount2$Rep==2]
-fit2 = Mclust(X2, G=2, model="V")
-fit2$parameters
+fit2<-mclustBIC(X2)
+fit2 #best support for E1, then E2
+#fit2 <- Mclust(X2, G=2, model="V")
+#fit2$parameters
 #(mean1, var1)=(2.774017, 0.09134093) and (mean2, var2)=(4.319905, 0.32749870), containing 42.6% and 57.3% of the mass respectively
 
 X3<-SeCount2$logCFU[SeCount2$Rep==3]
-fit3 = Mclust(X3, G=2, model="V")
-#summary(fit3)
-#plot(fit3, what="density", main="G2", xlab="logCFU")
-#rug(X3)
+fit3<-mclustBIC(X3)
+fit3 #Best support for E2
+fit3 <- Mclust(X3, G=2, model="E")
+summary(fit3)
+plot(fit3, what="density", main="G2", xlab="logCFU")
+rug(X3)
 fit3$parameters
-#(mean1, var1)=(3.680638, 0.97808089) and (mean2, var2)=(4.905500, 0.03381337), containing 67.2% and 32.8% of the mass respectively
+#(mean1, var1)=(3.7839, 0.06167) and (mean2, var2)=(4.9194, 0.06167), containing 42.1% and 57.9% of the mass respectively
 
 #library(sBIC)
 gMix = GaussianMixtures(maxNumComponents=10, phi=1, restarts=100)
@@ -127,34 +293,37 @@ legend("bottomleft",
 # Using the all-SE 2-mode GMM, we can generate simulated data
 # Note that we are allowing the weight in modes to be stochastic (binomial) 
 
-temp<-wormbootGMM(100, 50, 2.985569, 0.4568056, 4.742767, 0.1239928, 0.58, 0)
+# fit 1
+#(mean1, var1)=(3.3866, 0.05795) and (mean2, var2)=(4.74495, 0.05795), containing 34.6% and 65.4% of the mass respectively
+# fit 3
+#(mean1, var1)=(3.7839, 0.06167) and (mean2, var2)=(4.9194, 0.06167), containing 42.1% and 57.9% of the mass respectively
 
-SeBootGMM<-wormbootGMM(100, 50, 2.985569, 0.4568056, 4.742767, 0.1239928, 0.58, 0)
-SeBootGMM$set<-as.factor(SeBootGMM$set)
+#temp<-wormbootGMM(100, 50, 2.985569, 0.4568056, 4.742767, 0.1239928, 0.58, 0)
+
+SeBootGMM<-wormbootGMM(100, 50, 3.3866, 0.05795, 4.74495, 0.05795, 0.654, 0)
 SeBootGMM$batch<-as.factor(SeBootGMM$batch)
 
-SeBootGMM.1.2<-wormbootGMM(100, 50, 2.985569, 0.4568, 4.742767, 0.12399, 0.57, 0.15)
-SeBootGMM.1.2$set<-as.factor(SeBootGMM.1.2$set)
+SeBootGMM.1.2<-wormbootGMM(100, 50, 3.3866, 0.05795, 4.74495, 0.05795, 0.654, 0.10)
 SeBootGMM.1.2$batch<-as.factor(SeBootGMM.1.2$batch)
 
-SeBootGMM.1.2.05<-wormbootGMM(100, 50, 2.985569, 0.4568, 4.742767, 0.12399, 0.57, 0.05)
+SeBootGMM.1.2.05<-wormbootGMM(100, 50, 3.3866, 0.05795, 4.74495, 0.05795, 0.654, 0.05)
 
 # change the data set labels to be less confusing
 SeBootGMM$set<-as.numeric(SeBootGMM$set)
-SeBootGMM<-as.tibble(SeBootGMM) %>%
+SeBootGMM<-as_tibble(SeBootGMM) %>%
   mutate(set=replace(set, set=="A", 1)) %>%
   mutate(set=replace(set, set=="B", 2))
 glimpse(SeBootGMM)
 SeBootGMM$set<-as.factor(SeBootGMM$set)
 
 SeBootGMM.1.2$set<-as.numeric(SeBootGMM.1.2$set)
-SeBootGMM.1.2<-as.tibble(SeBootGMM.1.2) %>%
+SeBootGMM.1.2<-as_tibble(SeBootGMM.1.2) %>%
   mutate(set=replace(set, set=="A", 1)) %>%
   mutate(set=replace(set, set=="B", 2))
 glimpse(SeBootGMM.1.2)
 SeBootGMM.1.2$set<-as.factor(SeBootGMM.1.2$set)
 
-SeBootGMM.1.2.05<-as.tibble(SeBootGMM.1.2.05) %>%
+SeBootGMM.1.2.05<-as_tibble(SeBootGMM.1.2.05) %>%
   mutate(set=replace(set, set=="A", 1)) %>%
   mutate(set=replace(set, set=="B", 2))
 glimpse(SeBootGMM.1.2)
@@ -212,7 +381,7 @@ pSeBootGMM.1.2.05<-SeBootGMM.1.2.05 %>%
 pSeBootGMM.1.2.05
 
 plot_grid(pSeBootGMM, pSeBootGMM.1.2, pSeBootGMM.1.2.05, ncol=1, labels="AUTO")
-ggsave("FigS2_pSimSeGMM_day1v2.png", width=12, height=10, units="in", dpi=400)
+ggsave("FigS2_pSimSeGMM_day1v3.png", width=12, height=10, units="in", dpi=400)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
