@@ -5,7 +5,7 @@ wormbootOnCounts<-function(reps, mydata, Dcorrect){
   # the dilution at which these colonies were measured is in column "D"
   # and the CFU/worm is in column "CFU"
   #
-  ## The dilution correction factor (numeric) is given as "Dcorrect"
+  ## The dilution correction (numeric) is given as "Dcorrect"
   # 
   # Returns a data frame of simulated batch digests
   # with batch sizes 1, 5, 10, 20, 50 worms/batch
@@ -49,3 +49,4 @@ wormbootOnCounts<-function(reps, mydata, Dcorrect){
   dataSet<-data.frame(Batch, CFU, logCFU)
   return(dataSet)
 }
+
