@@ -1,17 +1,5 @@
-library(ggplot2)
-library(tidyverse)
-library(cowplot)
-library(mclust)
-library(e1071)
-library(ggpubr)
-
-# Code variously stolen from
-# https://www.datanovia.com/en/blog/how-to-change-ggplot-facet-labels/
-
-
-save.image("WormDigestHetSims.Rdata")
-
-load("WormDigestHetSims.Rdata")
+pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, readxl)
+xTextSize<-14
 
 #############################################################################
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -76,32 +64,32 @@ wormbootOnCounts<-function(reps, mydata, Dcorrect){
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~   Figure 1A
-# Real data from batch digests 2022-2-18, SA and SE
-# SA looks fine, but didn't get enough worms for SE, and needed to plate higher dilutions
+# Real data from batch digests 2022-2-18,
+# N2 worms with Staphylococcus aureus
+
 BatchDigests<-read.table("batchdigests.txt", header=TRUE)
 BatchDigests$Batch<-as.factor(BatchDigests$Batch)
-pBatchSA<-subset(BatchDigests, Species=="SA") %>%
+pBatchSA<-subset(BatchDigests) %>%
   ggplot(aes(x=Batch, y=logCFU, color=Batch)) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + theme_classic() + 
-  theme(text=element_text(size=16), 
+  theme(text=element_text(size=xTextSize), 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(),
-        plot.title=element_text(hjust=0.5, size=14),
+        plot.title=element_text(hjust=0.5, size=xTextSize),
+        axis.title.y = element_text(size=xTextSize),
+        axis.text.y = element_text(size=xTextSize-1),
+        legend.text = element_text(size=xTextSize-1),
         legend.position=c(0.9,0.3)) + 
   labs(title=expression(paste(italic("S. aureus"), " Newman")), y=expression(log[10](CFU/Worm)))
 pBatchSA
-ggsave("pBatchSA.png", width=4, height=3, units="in", dpi=300)
+#ggsave("pBatchSA.png", width=4, height=3, units="in", dpi=300)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Now Salmonella enterica LT2-GFP single worms (fed on plates), same as in bleach protocol
-# and corresponding data for S. aureus-GFP
-# including single worm data from the batch digest run on 2022-2-18
+# Now Salmonella enterica LT2-GFP single worms (fed on plates)
+# and data for S. aureus-GFP
 
-SaSeCount<-read.table("SaSeCount.txt", header=TRUE)  
-#SaSeCount$Condition<-as.factor(SaSeCount$Condition)
-#SaSeCount$Date<-as.factor(SaSeCount$Date)
-#SaSeCount$Rep<-as.factor(SaSeCount$Rep)
+SaSeCount<-read_xlsx("SaSeCount.xlsx")  
 
 SaSeCount %>%
   ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
@@ -115,7 +103,7 @@ SaSeCount %>%
     legend.position = "none") +
   facet_wrap(vars(Condition), scales="free_x") +
   labs(y="log10(CFU/worm)", x="Replicate")
-ggsave("pSaSeLogCFUByReplicate.png", width=8, height=5, units="in", dpi=400)
+#ggsave("pSaSeLogCFUByReplicate.png", width=8, height=5, units="in", dpi=400)
 
 # summary statistics
 SaSeCount %>%
@@ -148,9 +136,6 @@ SaSeCount2 %>%
   facet_wrap(vars(Condition), scales="free_x")+
   labs(y="log10(CFU/worm)", x="Replicate")
 	
-#labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)")
-#ggsave("pSeByDay.png",width=4, height=3, units="in", dpi=300)
-
 # summary statistics
 SaSeCount2 %>%
   group_by(Condition, Rep) %>%
@@ -164,11 +149,11 @@ SaSeCount2 %>%
   )
 
 
-#another version of this plot with the combined data (all 3 days as rep 0)
+#another version of this plot with the combined data as "Pooled"
 mylen<-dim(SaSeCount2)[1]
-SaSeTemp<-rbind(SaSeCount2, data.frame(Treatment=SaSeCount2$Treatment, Condition=SaSeCount2$Condition,
-                                   Date=rep("All", mylen),
-                                  Rep=rep("0", mylen),
+SaSeCount2$Rep<-as.factor(SaSeCount2$Rep)
+SaSeTemp<-rbind(SaSeCount2, data.frame(Condition=SaSeCount2$Condition,
+                                  Rep=rep("Pooled", mylen),
                                    Count=SaSeCount2$Count,
                                    D=SaSeCount2$D,
                                   CFU=SaSeCount2$CFU,
@@ -179,6 +164,7 @@ SaSeTemp %>%
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
+  scale_color_viridis_d(end=0.9)+
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(),
@@ -200,45 +186,44 @@ temp1<-SaSeCount %>%
 temp2<-SaSeCount %>%
   filter(Condition=="SE" & Rep=="2")
 
-SeBoot1<-wormbootOnCounts(25, temp1, 20)
-SeBoot2<-wormbootOnCounts(25, temp2, 20)
+# summary statistics
+mean(temp1$CFU)
+median(temp1$CFU)
+mean(temp2$CFU)
+median(temp2$CFU)
+
+SeBoot1<-wormbootOnCounts(41, temp1, 20)
+SeBoot2<-wormbootOnCounts(29, temp2, 20)
 SeBoot1$Rep<-as.factor("Rep1")
 SeBoot2$Rep<-as.factor("Rep2")
 jointSeBoot<-rbind(SeBoot1, SeBoot2)
-#SeBleachCount$Date<-as.factor(SeBleachCount$Date)
 
 pJointSEBoot<-jointSeBoot %>%
 	ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
 	geom_violin(fill=NA) + 
-	ylim(-0.1,6)+ theme_classic() + 
+	ylim(-0.1,6.2) + 
+  theme_classic() +
+  scale_color_viridis_d(begin=0.3, end=0.8) +
 	theme(
-	text=element_text(size=14), 
-	axis.title.x = element_blank(),
-	axis.text.x = element_blank(),
-	plot.title=element_text(hjust=0.5,size=14),
-	legend.position=c(0.9,0.3),
-	legend.title = element_blank())+
-	#legend.position="none") +
+	  text=element_text(size=xTextSize), 
+	  axis.title.x = element_blank(),
+	  axis.text.x = element_blank(),
+	  axis.text.y = element_text(size=xTextSize-1),
+	  axis.title.y = element_text(size=xTextSize),
+	  plot.title=element_text(hjust=0.5,size=xTextSize),
+	  legend.position=c(0.9,0.3),
+	  legend.title = element_blank(),
+	  legend.text = element_text(size=xTextSize-1)
+	  )+
   facet_wrap(vars(Batch), ncol=5)+
-	labs(x="Replicate", y=expression(log[10](CFU/Worm)))
-#ggsave("pjointSeBoot.svg", width=9, height=4, units="in", dpi=300)
+	labs(x="Replicate", y=expression(log[10](CFU/Worm)))+
+  stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
+  stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot
 #ggsave("pSeBootTwoRepsByColonies_unpruned_ByReplicate.png", width=8, height=5, units="in", dpi=400)
 
 #and some statistical tests on the bootstrapped data
-t.test(SeBoot1$CFU[SeBoot1$Batch==1], SeBoot2$CFU[SeBoot2$Batch==1])
-t.test(SeBoot1$CFU[SeBoot1$Batch==5], SeBoot2$CFU[SeBoot2$Batch==5])
-t.test(SeBoot1$CFU[SeBoot1$Batch==10], SeBoot2$CFU[SeBoot2$Batch==10])
-t.test(SeBoot1$CFU[SeBoot1$Batch==20], SeBoot2$CFU[SeBoot2$Batch==20])
-t.test(SeBoot1$CFU[SeBoot1$Batch==50], SeBoot2$CFU[SeBoot2$Batch==50])
-
-wilcox.test(SeBoot1$CFU[SeBoot1$Batch==1], SeBoot2$CFU[SeBoot2$Batch==1])
-wilcox.test(SeBoot1$CFU[SeBoot1$Batch==5], SeBoot2$CFU[SeBoot2$Batch==5])
-wilcox.test(SeBoot1$CFU[SeBoot1$Batch==10], SeBoot2$CFU[SeBoot2$Batch==10])
-wilcox.test(SeBoot1$CFU[SeBoot1$Batch==20], SeBoot2$CFU[SeBoot2$Batch==20])
-wilcox.test(SeBoot1$CFU[SeBoot1$Batch==50], SeBoot2$CFU[SeBoot2$Batch==50])
-
 t.test(SeBoot1$logCFU[SeBoot1$Batch==1], SeBoot2$logCFU[SeBoot2$Batch==1])
 t.test(SeBoot1$logCFU[SeBoot1$Batch==5], SeBoot2$logCFU[SeBoot2$Batch==5])
 t.test(SeBoot1$logCFU[SeBoot1$Batch==10], SeBoot2$logCFU[SeBoot2$Batch==10])
@@ -264,155 +249,109 @@ median(BatchDigests$CFU[BatchDigests$Species=="SA" & BatchDigests$Batch==1 ])
 #~~~~                 FIGURE 2
 #~~~~    WITHIN AND BETWEEN REPLICATE HETEROGENEITY OF CFUS
 #
-# First, pull in the all-8 data set so we can describe run to run variation
+# First, pull in the community colonization data set (10.1128/mSystems.00608-20)
+# and the single worm data from NRRL1 evolution paper (10.1093/femsec/fiac115)
+# so we can describe run to run variation
 # just need the total counts for this
 
-All8<-read.table("All8.txt", header=TRUE)
-names(All8)
-hosts<-unique(All8$Host)
-All8$logTotal<-log10(All8$Total)
-All8[All8=="decc1"]<-"dec1"
-All8$logTotal[is.infinite(All8$logTotal)]<-NA
-All8<-All8[complete.cases(All8),]
+
+WormReps<-read_csv("WormCFUReplicates.csv")
+names(WormReps)
+WormReps$Condition[WormReps$Condition=="decc1"]<-"dec1" # fixing a strain name
+
+WormReps<-WormReps[complete.cases(WormReps),]
 
 # filter the original data set to remove anything with <18 measurements per strain on a given day
-temp<-unique(All8$Host)
-All8.temp<-All8
-for (i in 1:length(temp)){
-	#print(i)
-	tempdata<-subset(All8.temp, Host==temp[i])
+conditions<-unique(WormReps$Condition)
+WormReps.temp<-WormReps
+for (i in 1:length(conditions)){
+	tempdata<-subset(WormReps.temp, Condition==conditions[i])
 	temp2<-unique(tempdata$Date)
 	for (j in 1:length(temp2)){
-		#print(temp[i])
-		mycount<-(length(All8.temp$logTotal[All8.temp$Host==temp[i] & All8.temp$Date==temp2[j]]))
-		#print(mycount<18)
-		if(mycount<18) {
-			All8.temp$logTotal[All8.temp$Host==temp[i] & All8.temp$Date==temp2[j]]<-NA
+		mycount<-(length(WormReps.temp$logCFU[WormReps.temp$Condition==conditions[i] & 
+		                                       WormReps.temp$Date==temp2[j]])) #check # worms in data set
+		if(mycount<18) { #if too few worms
+		  WormReps.temp$logCFU[WormReps.temp$Condition==conditions[i] & 
+		                        WormReps.temp$Date==temp2[j]]<-NA #flag for removal
 		}
 	}
 }
-All8.temp$logTotal[is.infinite(All8.temp$logTotal)]<-NA
-All8.big<-All8.temp[complete.cases(All8.temp),]
-rm(All8.temp, temp)
+WormReps.temp$logCFU[is.infinite(WormReps.temp$logCFU)]<-NA
+WormReps.big<-WormReps.temp[complete.cases(WormReps.temp),]
+rm(WormReps.temp)
 
 ### let's see what's left
-hosts.big<-unique(All8.big$Host)
+conditions.big<-unique(WormReps.big$Condition)
 temp<-integer()
-for (i in 1:length(hosts.big)){
-	temp[i]<-length(unique(All8.big$Date[All8.big$Host==hosts.big[i]]))}
-temp
-#[1] 2 1 3 3 2 2 2 1 1 1 4 1 2
-temp2<-unique(All8.big$Host)
-#[1] "AU37"   "ctls40" "daf16"  "daf2"   "dbl1"   "dec1"   "exp1"   "glp1"   "glp4"   "hsf1"   "N2"    
-#[12] "phm2"   "vhp1"
+for (i in 1:length(conditions.big)){
+	temp[i]<-length(unique(WormReps.big$Rep[WormReps.big$Condition==conditions.big[i]]))}
+temp # number of replicates each experimental condition
+temp2<-unique(WormReps.big$Condition) #lost one host type
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#~~~~~~~~  Building the filtered All8 data set
+#~~~~~~~~  Building the filtered data set
 # Let's filter out anything that doesn't have 2 or more data sets left
 # these have enough runs to be worth it
-temp2[which(temp>1)]
-# [1] "AU37"  "daf16" "daf2"  "dbl1"  "dec1"  "exp1"  "N2"    "vhp1"
-All8.big<-subset(All8.big, Host=="AU37" | Host=="daf16"| Host=="daf2" | Host=="dbl1" | Host=="dec1" | Host=="exp1" | Host=="N2" | Host=="vhp1")
-
-# And get dates into a consistent format
-#unique(All8.big$Date)
-# 21319    22519  7122019  7292019  8162019  5102019  9112019  9162019  6262019  6142019  6192019
-#[12]  6212019 10252019 10202021
-
-All8.big$Date<-as.character(All8.big$Date)
-All8.big[All8.big=="21319"]<-"2/13/19"
-All8.big[All8.big=="22519"]<-"2/25/19"
-All8.big[All8.big=="5102019"]<-"5/10/19"
-All8.big[All8.big=="9112019"]<-"9/11/19"
-All8.big[All8.big=="9162019"]<-"9/16/19"
-All8.big[All8.big=="6142019"]<-"6/14/19"
-All8.big[All8.big=="6192019"]<-"6/19/19"
-All8.big[All8.big=="6212019"]<-"6/21/19"
-All8.big[All8.big=="6262019"]<-"6/26/19"
-All8.big[All8.big=="7122019"]<-"7/12/19"
-All8.big[All8.big=="7292019"]<-"7/29/19"
-All8.big[All8.big=="8162019"]<-"8/16/19"
-All8.big[All8.big=="10252019"]<-"10/25/19"
-All8.big[All8.big=="10202021"]<-"10/20/21"
-All8.big$Date<-as.factor(All8.big$Date)
-
+condition_list<-temp2[which(temp>1)]
+WormReps.big<-filter(WormReps.big, Condition %in% condition_list)
+  
 # Plot out individual replicates by host genotype
 # first create new facet labels
-host.labs<-c("AU37", "daf-16", "daf-2", "dbl-1", "dec-1", "exp-1", "N2", "vhp-1")
-names(host.labs)<-c("AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "N2", "vhp1")
-pAll8.big.byHost<-All8.big%>%
-  ggplot(aes(x=Date, y=logTotal, color=Date)) + geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
-  labs(title="Minimal community colonization, by replicate", y=expression(log[10](CFU/Worm))) +
-  facet_wrap(~Host, scales="free_x", ncol=4, labeller=labeller(Host=host.labs))+
-  theme(text=element_text(size=14), 
+condition.labs<-c("AU37", "daf-16", "daf-2", "dbl-1", "dec-1", "exp-1", "N2", "MO", "vhp-1")
+names(condition.labs)<-c("AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "N2", "MO.I2.9", "vhp1")
+
+pWormReps.big.byCondition<-WormReps.big %>%
+  ggplot(aes(x=factor(Rep), y=logCFU)) + 
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_violin(fill=NA) + 	
+  ylim(1,6) +	
+  theme_classic() + 
+  theme( 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(), 
+        axis.title.y = element_text(size=xTextSize),
+        axis.text.y = element_text(size=xTextSize-1),
         legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16),
-        strip.text.x = element_text(size=12, face="italic"))
-pAll8.big.byHost
-ggsave("pAll8BigLogCFUHostByDay.png", width=12, height=9, units="in", dpi=300)
+        plot.title=element_text(hjust=0.5, size=xTextSize),
+        strip.text.x = element_text(size=xTextSize-2, face="italic")) +
+  labs(title="Minimal community colonization, by replicate", y=expression(log[10](CFU/Worm))) +
+  facet_wrap(~Condition, scales="free_x", ncol=4, labeller=labeller(Condition=condition.labs))
+  
+pWormReps.big.byCondition
+
+#ggsave("pAll8BigLogCFUHostByDay.png", width=12, height=9, units="in", dpi=300)
 
 # Plot out the log-transformed CFU data by host genotype, replicates combined
-pAll8.big<-All8.big %>%
-	ggplot(aes(x=as.factor(Host), y=logTotal, color=as.factor(Host)))+
+WormReps.big %>%
+	ggplot(aes(x=as.factor(Condition), y=logCFU))+
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
 	geom_violin(fill=NA) + 	ylim(1,6) +	theme_classic() + 
 	theme(text=element_text(size=14), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
-	labs(title="Minimal Microbiome Totals", y=expression(log[10](CFU/Worm)))
-pAll8.big
+	labs(title="Totals", y=expression(log[10](CFU/Worm)))
 
-# 2022-06-03: bringing in single worm data from NRRL1 evolution paper
-NRRL1counts<-read_csv("NRRL1counts.csv")
-names(NRRL1counts)
-#[1] "Condition" "CFU"       "logCFU"    "Date"
-NRRL1counts$Date<-as.character(NRRL1counts$Date)
-
-#as before loop over experiment (Condition) and rep (Date) and record
-hosts2<-unique(NRRL1counts$Condition) #length 24
-
-# Only mono-colonization by MO.I2.9 (hosts[10]) has 2 reps of >18 (both n=24)
-# subset out & prep for rbind
-hosts2[10]
-MOcount<-subset(NRRL1counts, Condition==hosts2[10], select=c("Condition", "Date", "CFU", "logCFU")) %>%
-  rename("Host"="Condition",
-         "Total"="CFU",
-         "logTotal"="logCFU") %>%
-  as_tibble()
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # OK now we are going to take a WHOLE BUNCH of summary stats and see what we get
 
-AllCounts<-as_tibble(subset(All8.big, select=c("Host", "Date", "Total", "logTotal")))
+AllCounts<-as_tibble(subset(WormReps.big, select=c("Condition", "Rep", "CFU", "logCFU")))
 glimpse(AllCounts)
+AllCounts$Rep<-as.factor(AllCounts$Rep)
 
 # Incorporate the pathogen colonization data: prep for rbind
-#SeCount<-SeCount[complete.cases(SeCount),]
-#SeCount$Host<-"SE"
-#SaBleachCount2$Host<-"SA"
-SaSeCount2_subset<- subset(SaSeCount2, select=c("Condition", "Date", "CFU", "logCFU")) %>%
-  rename("Host" = "Condition", 
-        "Total"="CFU",
-         "logTotal"="logCFU") %>%
-  as_tibble()
-SaSeCount2_subset$Date<-as.character(SaSeCount2_subset$Date)
-glimpse(SaSeCount2_subset)
-glimpse(MOcount)
+SaSeCount2_subset<- subset(SaSeCount2, select=c("Condition", "Rep", "CFU", "logCFU")) 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Merge all the single-worm CFU data
-AllCounts2<-rbind(AllCounts, SaSeCount2_subset, MOcount) %>%
-  rename("Condition"="Host")
-glimpse(AllCounts2)
+AllCounts<-rbind(AllCounts, SaSeCount2_subset)
+glimpse(AllCounts)
 
 # Get a list of all experiments
-conditions.big<-unique(AllCounts2$Condition)
+conditions.big<-unique(AllCounts$Condition)
 
 # set up the data frame to hold our calculations
 AllCountsStats.r2r <- data.frame(Condition=character(),
-                 Date=character(),
+                 Rep=character(),
                  maxCFU=double(),
                  minCFU=double(),
                  q90=double(),
@@ -433,11 +372,11 @@ AllCountsStats.r2r <- data.frame(Condition=character(),
 # and record
 
 for (i in seq_along(conditions.big)){
-	temp<-unique(AllCounts2$Date[AllCounts2$Condition==conditions.big[i]])
+	temp<-unique(AllCounts$Rep[AllCounts$Condition==conditions.big[i]])
 #	print(conditions.big[i]) # for debugging
 	for (j in seq_along(temp)){
 #		print(temp[j]) # for debugging
-		tempCFU<-sort(AllCounts2$Total[AllCounts2$Condition==conditions.big[i] & AllCounts2$Date==temp[j]])
+		tempCFU<-sort(AllCounts$CFU[AllCounts$Condition==conditions.big[i] & AllCounts$Rep==temp[j]])
 		myq<-as.double(quantile(tempCFU, probs=c(0.1, 0.25, 0.5, 0.75, 0.9)))
 		# get values for Hogg's calculations
 		mylen<-length(tempCFU)
@@ -453,20 +392,20 @@ for (i in seq_along(conditions.big)){
 		U5<-mean(tempCFU[- (1:idx50)])
 		#build the new entry
 		AllCountsStats.r2r<-rbind(AllCountsStats.r2r, data.frame(Condition=conditions.big[i],
-		Date=temp[j],
-		maxCFU=max(tempCFU),
-		minCFU=min(tempCFU),
-		q90=myq[5],	
-		q75=myq[4],
-		q50=myq[3],
-		q25=myq[2],
-		q10=myq[1],
-		meanCFU=mean(tempCFU),
-		varCFU=var(tempCFU),
-		skewCFU=skewness(tempCFU),
-		kurtCFU=kurtosis(tempCFU),
-		Q1=(U05-M5)/(M5-L05),
-		Q2=(U05-L05)/(U5-L5)))
+	  	Rep=temp[j],
+	  	maxCFU=max(tempCFU),
+	  	minCFU=min(tempCFU),
+  		q90=myq[5],	
+  		q75=myq[4],
+	  	q50=myq[3],
+	  	q25=myq[2],
+	  	q10=myq[1],
+	  	meanCFU=mean(tempCFU),
+	  	varCFU=var(tempCFU),
+	  	skewCFU=skewness(tempCFU),
+	  	kurtCFU=kurtosis(tempCFU),
+	  	Q1=(U05-M5)/(M5-L05),
+	  	Q2=(U05-L05)/(U5-L5)))
 	}	
 }
 dim(AllCountsStats.r2r)
@@ -484,19 +423,29 @@ write.table(AllCountsStats.r2r, "WormDataRunToRun.txt", sep="\t")
 condition.labs<-c("N2","AU37", "daf-16", "daf-2", "dbl-1", "dec-1", "exp-1", "vhp-1", "M. oxydans",  "S. aureus", "S. enterica")
 names(condition.labs)<-c("N2","AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "vhp1", "MO.I2.9",  "SA", "SE")
 
-pAllCounts<-AllCounts2 %>%
+# we lost a lot of replicates - rescale for plotting
+unique(AllCounts$Rep)
+unique(AllCounts$Rep[AllCounts$Condition=="N2"]) #largest number of reps
+# fix N2
+AllCounts$Rep[AllCounts$Condition=="N2" & AllCounts$Rep=="10"]<-"4"
+AllCounts$Rep[AllCounts$Condition=="N2" & AllCounts$Rep=="11"]<-"5"
+
+pAllCounts<-AllCounts %>%
   mutate(Condition=factor(Condition, levels=c("N2","AU37", "daf16", "daf2", "dbl1", "dec1", "exp1", "vhp1", "MO.I2.9", "SA", "SE"))) %>%
-  ggplot(aes(x=Date, y=logTotal, color=Date)) + 
+  ggplot(aes(x=Rep, y=logCFU, color=Rep)) + 
   geom_point(shape=16, position=position_jitterdodge(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
+  scale_color_viridis_d(option="inferno", end=0.85)+
   facet_wrap(~Condition, scales="free_x", labeller=labeller(Condition=condition.labs))+
-  theme(text=element_text(size=16), 
+  theme( 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(),
+        axis.title.y = element_text(size=xTextSize), 
+        axis.text.y = element_text(size=xTextSize-1), 
         #plot.title=element_text(hjust=0.5, size=14),
         legend.position = "none",
-        strip.text.x = element_text(size=12, face="italic"))+
+        strip.text.x = element_text(size=xTextSize-2, face="italic"))+
   labs(y=expression(log[10](CFU/Worm)))
 pAllCounts
 #~~~~~ this will be FIGURE 2A
@@ -518,6 +467,7 @@ pAllCountStats<- AllCountStats.r2r %>%
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) + 	
   theme_classic() + 
+  scale_color_viridis_d(option="magma", begin=0.3, end=0.85)+
   theme(text=element_text(size=14), 
         axis.text.x = element_text(angle = 45, hjust=1),
         axis.title.x = element_blank(), 
@@ -602,29 +552,28 @@ pAllCountStats.r2r<-AllCountStats.r2r.dist %>%
                     levels=c("meanCFUdist", "meanCFUCohenD", "mediandist", "cvdist", "Q1dist","skewdist", "Q2dist", "kurtdist")) ) %>%
   ggplot(aes(x=same, y=Value, color=same))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_boxplot(fill=NA) +	theme_classic() + 
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        legend.position="none", 
-        plot.title=element_text(hjust=0.5, size=16)) +
+  geom_boxplot(fill=NA) +	
+  theme_classic() + 
+  scale_color_viridis_d(option="magma", begin=0.3, end=0.7)+
+  theme( 
+    axis.title.x = element_blank(), 
+    axis.text.x = element_text(size=xTextSize-1),
+    axis.title.y = element_text(size=xTextSize), 
+    axis.text.y = element_text(size=xTextSize-1), 
+    legend.position="none", 
+      plot.title=element_text(hjust=0.5, size=xTextSize)) +
   labs(title="", y="Distance between pairs")+
   facet_wrap(vars(Var), scales="free_y", ncol=2, labeller=labeller(Var=my.labs))+
-  stat_compare_means(label.x.npc = 0.5, label.y.npc=0.9, size=4)
+  stat_compare_means(aes(label = paste0("p = ", after_stat(p.format))),
+                         label.x.npc = 0.5, label.y.npc=0.9, size=4)
 pAllCountStats.r2r
-ggsave("pAll8SelectMomentsSummaryDistance.png", width=9, height=12, units="in", dpi=400)
+#ggsave("pAll8SelectMomentsSummaryDistance.png", width=9, height=12, units="in", dpi=400)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~   FIGURE 2 ASSEMBLY
 plot_grid(pAllCounts, pAllCountStats.r2r, rel_widths=c(1, 1.2), labels="AUTO")
-ggsave("Fig2_AllCounts_logCFU_MomentDist.png", width=15, height=9, units="in")
+ggsave("Fig2_AllCounts_logCFU_MomentDist.png", width=15, height=9, units="in", dpi=400)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-# And some comparisons for the record
-wilcox.test(meanCFUdist~same, data=All8.big.r2r.dist)
-wilcox.test(cvdist~same, data=All8.big.r2r.dist)
-wilcox.test(skewdist~same, data=All8.big.r2r.dist)
-wilcox.test(kurtdist~same, data=All8.big.r2r.dist)
-
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -635,7 +584,7 @@ wilcox.test(kurtdist~same, data=All8.big.r2r.dist)
 #####        with real data 
 # Pairs 
 #(N2 6/21/19 vs dbl-1 6/26/19)
-#(SE day 2 vs. N2 adults 2/13/19)
+#(SE replicate 2 vs. N2 adults 2/13/19)
 # First have to import the raw data for the multispecies colonization
 
 jointBootRawData<-read.table("jointBootFalseNegativeRawData.txt", header=TRUE)
@@ -653,16 +602,10 @@ mean(temp1A$CFU)
 sd(temp1A$CFU)/mean(temp1A$CFU)
 skewness(temp1A$CFU)
 
-#All8.big %>%
-#  filter(Host=="N2" & Date=="6/21/19") %>%
-#  select(Total)
-
 # here we will call the wormboot function (wormbootOnCounts.R)
 # to generate simulated data and make comparisons
-# 23 reps to match the smallest data set (N2)
+# 22 data points to match the smallest data set (N2)
 # batch 50 is pretty large for these data so we'll stop at 20
-#note that wormboot() has changed to allow isRand=TRUE (default is FALSE)
-#which creates U[up,down] errors in CFU counts
 
 tempBoot1A<-wormbootOnCounts(22, temp1A, 2)
 tempBoot2A<-wormbootOnCounts(22, temp2A, 2)
@@ -675,17 +618,20 @@ pjointBootA<-jointTempBootA  %>%
   ggplot(aes(x=Host, y=logCFU, color=Host)) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
-  ylim(-0.1,6)+ 
+  ylim(2,6)+ 
   theme_classic() + 
-  theme(
-    text=element_text(size=14), 
-    axis.title.x = element_blank(),
+  scale_color_viridis_d(begin=0.3, end=0.7)+
+  theme( 
+    axis.title.x = element_blank(), 
+    axis.title.y = element_text(size=xTextSize), 
+    axis.text.y = element_text(size=xTextSize-1), 
     axis.text.x = element_blank(),
     plot.title=element_text(hjust=0.5,size=14),
     legend.position="none") +
   labs(title=expression(paste("N2 vs ", italic(dbl-1))), y=expression(log[10](CFU/worm)))+
   facet_wrap(vars(Batch), nrow = 1)+
-  stat_compare_means(label.y = 0.4, label.x=1)
+  stat_compare_means(aes(label = paste0("p = ", after_stat(p.format))),
+                     label.x = 1, size=4)
 pjointBootA
 
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -696,15 +642,17 @@ temp1<-jointBootRawData %>%
   select(Host, Count, D, CFU) %>%
   rename(Condition=Host)
 glimpse(temp1)
-glimpse(SeCount2)
-temp2<-subset(SeCount2, Rep=="2", select=c("Condition", "Count", "D", "CFU"))
+temp2<-SaSeCount2 %>%
+  filter(Condition =="SE") %>%
+  subset(Rep=="2", select=c("Condition", "Count", "D", "CFU"))
 glimpse(temp2)
-#mean(SeCount2$CFU[SeCount2$Rep=="2"])
-#length(SeCount2$CFU[SeCount2$Rep=="2"])
-#skewness(SeCount2$CFU[SeCount2$Rep=="2"])
+
 mean(temp1$CFU)
 sd(temp1$CFU)/mean(temp1$CFU)
 skewness(temp1$CFU)
+mean(temp2$CFU)
+sd(temp2$CFU)/mean(temp2$CFU)
+skewness(temp2$CFU)
 
 # Boostrap data
 tempBoot1B<-wormbootOnCounts(24, temp1, 2)
@@ -718,17 +666,20 @@ pJointBootB<- jointTempBootB  %>%
   ggplot(aes(x=Condition, y=logCFU, color=Condition)) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
-  ylim(-0.1,6)+ 
+  ylim(2,6)+ 
   theme_classic() + 
-  theme(
-    text=element_text(size=14), 
-    axis.title.x = element_blank(),
+  scale_color_viridis_d(begin=0.3, end=0.7)+
+  theme( 
+    axis.title.x = element_blank(), 
+    axis.title.y = element_text(size=xTextSize), 
+    axis.text.y = element_text(size=xTextSize-1), 
     axis.text.x = element_blank(),
     plot.title=element_text(hjust=0.5,size=14),
     legend.position="none") +
   labs(title=expression(paste("Multi-species vs ", italic("S. enterica"), "in N2 hosts")), y=expression(log[10](CFU/worm)))+
   facet_wrap(vars(Batch), nrow = 1)+
-  stat_compare_means(label.y = 0.4, label.x=1)
+  stat_compare_means(aes(label = paste0("p = ", after_stat(p.format))),
+                     label.x = 1, size=4)
 pJointBootB
 
 plot_grid(pjointBootA, pJointBootB, labels="AUTO", ncol=1)
@@ -736,30 +687,50 @@ plot_grid(pjointBootA, pJointBootB, labels="AUTO", ncol=1)
 ggsave("Fig3_pjointFalseNegativeBoot.png", width=10, height=7, units="in", dpi=300)
 
 # let's do this a bunch of times
+# pair 1
 reps<-10000
-wpv1<-numeric(reps)
 wpv5<-numeric(reps)
 wpv10<-numeric(reps)
 wpv20<-numeric(reps)
 wpv50<-numeric(reps)
 
 for (j in 1:reps){
-  tempBoot1<-wormbootOnCounts(24, temp1A, 2)
-  tempBoot2<-wormbootOnCounts(24, temp2A, 2)
-  wtest1<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==1], tempBoot2$CFU[tempBoot2$Batch==1])
+  tempBoot1<-WormbootOnCounts(22, temp1A, 2)
+  tempBoot2<-wormbootOnCounts(22, temp2A, 2)
   wtest5<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==5], tempBoot2$CFU[tempBoot2$Batch==5])
   wtest10<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==10], tempBoot2$CFU[tempBoot2$Batch==10])
   wtest20<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==20], tempBoot2$CFU[tempBoot2$Batch==20])
   wtest50<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==50], tempBoot2$CFU[tempBoot2$Batch==50])
-  wpv1[j]<-wtest1$p.value
   wpv5[j]<-wtest5$p.value
   wpv10[j]<-wtest10$p.value
   wpv20[j]<-wtest20$p.value
   wpv50[j]<-wtest50$p.value
 }
 
-w.pvals.A<-c(sum(wpv1<0.05)/reps, sum(wpv5<0.05)/reps, sum(wpv10<0.05)/reps, 
+w.pvals.A<-c(sum(wpv5<0.05)/reps, sum(wpv10<0.05)/reps, 
              sum(wpv20<0.05)/reps, sum(wpv50<0.05)/reps)
-#w.pvals.B<-c(sum(wpv1<0.05)/reps, sum(wpv5<0.05)/reps, sum(wpv10<0.05)/reps, 
-#           sum(wpv20<0.05)/reps, sum(wpv50<0.05)/reps)
 w.pvals.A
+
+#~~~~~~~~~~~~~~~~~~~~~~~~
+# pair 2
+wpv5<-numeric(reps)
+wpv10<-numeric(reps)
+wpv20<-numeric(reps)
+wpv50<-numeric(reps)
+
+for (j in 1:reps){
+  tempBoot1<-wormbootOnCounts(24, temp1, 2)
+  tempBoot2<-wormbootOnCounts(24, temp2, 20)
+  wtest5<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==5], tempBoot2$CFU[tempBoot2$Batch==5])
+  wtest10<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==10], tempBoot2$CFU[tempBoot2$Batch==10])
+  wtest20<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==20], tempBoot2$CFU[tempBoot2$Batch==20])
+  wtest50<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==50], tempBoot2$CFU[tempBoot2$Batch==50])
+  wpv5[j]<-wtest5$p.value
+  wpv10[j]<-wtest10$p.value
+  wpv20[j]<-wtest20$p.value
+  wpv50[j]<-wtest50$p.value
+}
+
+w.pvals.B<-c(sum(wpv5<0.05)/reps, sum(wpv10<0.05)/reps, 
+             sum(wpv20<0.05)/reps, sum(wpv50<0.05)/reps)
+w.pvals.B
