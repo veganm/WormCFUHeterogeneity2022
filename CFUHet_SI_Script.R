@@ -124,15 +124,23 @@ wormbootGMM<-function(reps, batches, meanD, varD, meanU, varU, fUP, fDIFF){
   dataA<-c(tempA, temp5A, temp10A, temp20A, temp50A)
   dataB<-c(tempB, temp5B, temp10B, temp20B, temp50B)
   frameA<-data.frame(batch, logCount=dataA)
-  frameA$set<-"A"
+  frameA$set<-"1"
   frameB<-data.frame(batch, logCount=dataB)
-  frameB$set<-"B"
+  frameB$set<-"2"
   mydata<-rbind(frameA, frameB)
   mydata$Count<-10^mydata$logCount
   return(mydata)
 }
 
 #########################################################################################
+#########################################################################################
+
+
+
+
+#########################################################################################
+#########################################################################################
+
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -148,45 +156,40 @@ wormbootGMM<-function(reps, batches, meanD, varD, meanU, varU, fUP, fDIFF){
 library(mclust, quietly=TRUE)
 library(sBIC)
 
-# Using data for SE and SA with all experimental runs, zeros removed, dates as integers 1-3
-pSEsingle<-SeCount2 %>%
-  ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+# Using data for SE and SA with all experimental runs, zeros removed, run IDs as integers 1-3
+# Combined data as "Pooled"
+mylen<-dim(SaSeCount2)[1]
+SaSeCount2$Rep<-as.factor(SaSeCount2$Rep)
+SaSeCountPool<-rbind(SaSeCount2, data.frame(Condition=SaSeCount2$Condition,
+                                            Rep=rep("Pooled", mylen),
+                                            Count=SaSeCount2$Count,
+                                            D=SaSeCount2$D,
+                                            CFU=SaSeCount2$CFU,
+                                            logCFU=SaSeCount2$logCFU
+))
+pSeCountAll<-SaSeCountPool %>%
+  filter(Condition=="SE") %>%
+  ggplot(aes(x=Rep, y=logCFU, color=Rep)) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
-  theme(text=element_text(size=16), 
-        axis.title.x = element_blank(), 
-        axis.text.x = element_text(size=12),
-        plot.title=element_text(hjust=0.5, size=14),
-        legend.position = "none") + 
-  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)))
-pSEsingle
-ggsave("pSEsingle.png", width=4, height=3, units="in", dpi=300)
-
-#another version of this plot with the combined data
-SeTemp<-SaSeTemp %>%
-  filter(Condition=="SE")
-
-SeTemp$Rep[SeTemp$Rep==0]<-"All"
-pSeCountAll<-ggplot(SeTemp, aes(x=factor(Rep), y=logCFU, color=factor(Rep))) +
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_violin(fill=NA) + 
-  theme_classic() + 
+  scale_color_viridis_d(end=0.9)+
   theme(text=element_text(size=14), 
-        #axis.title.x = element_blank(), 
-        #axis.text.x = element_blank(),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=14),
-        legend.title = element_blank()) + 
-  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)), x="Replicate")
+        ) + 
+  # facet_wrap(vars(Condition), scales="free_x") +
+  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)), color="Replicate")
+#ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
 pSeCountAll
-ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
 
 #ok let's try some gaussian mixture models (code from vignette)
-X<-SeCount2$logCFU
+X<-SaSeCountPool$logCFU[SaSeCountPool$Condition=="SE" & SaSeCountPool$Rep=="Pooled"]
 mean(X)
 var(X)
-mean(SeCount2$CFU)
-sd(SeCount2$CFU)
+mean(SaSeCountPool$CFU[SaSeCountPool$Condition=="SE"& SaSeCountPool$Rep=="Pooled"])
+sd(SaSeCountPool$CFU[SaSeCountPool$Condition=="SE"& SaSeCountPool$Rep=="Pooled"])
 
 fit<- mclustBIC(X)
 fit
@@ -195,6 +198,31 @@ fit
 #-174.8787 -177.0372 -180.1553 
 
 plot(fit)
+# build a tibble for ggplotting
+fitBIC.df<-tibble(Components=rep(1:9),
+                  E=fit[,1],
+                  V=fit[,2],
+               )
+
+# plot
+pSePooledBICMclust<-fitBIC.df %>%
+  pivot_longer(
+    cols=E:V,
+    names_to="Var",
+    values_to="BIC"
+  ) %>%
+  ggplot(aes(x=Components, y=BIC, linetype=factor(Var), pch=factor(Var)))+
+  geom_line()+
+  scale_x_continuous(breaks=seq(1, 9, by=1))+
+  theme_classic() + 
+  theme(text=element_text(size=14), 
+        #axis.title.x = element_blank(), 
+        #axis.text.x = element_blank(),
+        plot.title=element_text(hjust=0.5, size=14),
+        legend.title = element_blank()) + 
+  labs(title=expression(paste(italic("S. enterica"), " LT2, Pooled")), x="# Components", y="BIC")
+pSePooledBICMclust
+
 
 # Here we are still fitting to the combined Salmonella colonization data.
 # Fitting a model with two components, allowing variances to be unequal ("V") or equal ("E")
@@ -234,14 +262,15 @@ pSeAllDensityMclust<-newdata %>%
         #axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=14),
         legend.title = element_blank()) + 
-  labs(title=expression(paste(italic("S. enterica"), " LT2, All")), x=expression(log[10](CFU/Worm)), y="Density")
+  labs(title=expression(paste(italic("S. enterica"), " LT2, Pooled")), x=expression(log[10](CFU/Worm)), y="Density")
 pSeAllDensityMclust
-plot_grid(pSeCountAll, pSeAllDensityMclust, ncol=2, labels="AUTO", align="h")
-ggsave("FigS1_SentericaMclust.png", width=7, height=3, dpi=400, units="in")
+
+plot_grid(pSeCountAll, pSeAllDensityMclust, pSePooledBICMclust, ncol=3, labels="AUTO", align="h")
+ggsave("FigS1_SentericaMclust.png", width=10, height=3, dpi=400, units="in")
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # We can also look at each replicate individually
-X1<-SeCount2$logCFU[SeCount2$Rep==1]
+X1<-SaSeCountPool$logCFU[SaSeCountPool$Condition=="SE" & SaSeCountPool$Rep=="1"]
 fit1<-mclustBIC(X1)
 fit1 # Best support for G=2, model E
 fit1 <- Mclust(X1, G=2, model="E")
@@ -251,14 +280,14 @@ rug(X1)
 fit1$parameters
 #(mean1, var1)=(3.3866, 0.05795) and (mean2, var2)=(4.74495, 0.05795), containing 34.6% and 65.4% of the mass respectively
 
-X2<-SeCount2$logCFU[SeCount2$Rep==2]
+X2<-SaSeCountPool$logCFU[SaSeCountPool$Condition=="SE" & SaSeCountPool$Rep=="2"]
 fit2<-mclustBIC(X2)
 fit2 #best support for E1, then E2
-#fit2 <- Mclust(X2, G=2, model="V")
-#fit2$parameters
+fit2 <- Mclust(X2, G=2, model="V")
+fit2$parameters
 #(mean1, var1)=(2.774017, 0.09134093) and (mean2, var2)=(4.319905, 0.32749870), containing 42.6% and 57.3% of the mass respectively
 
-X3<-SeCount2$logCFU[SeCount2$Rep==3]
+X3<-SaSeCountPool$logCFU[SaSeCountPool$Condition=="SE" & SaSeCountPool$Rep=="3"]
 fit3<-mclustBIC(X3)
 fit3 #Best support for E2
 fit3 <- Mclust(X3, G=2, model="E")
@@ -297,36 +326,21 @@ legend("bottomleft",
 #(mean1, var1)=(3.3866, 0.05795) and (mean2, var2)=(4.74495, 0.05795), containing 34.6% and 65.4% of the mass respectively
 # fit 3
 #(mean1, var1)=(3.7839, 0.06167) and (mean2, var2)=(4.9194, 0.06167), containing 42.1% and 57.9% of the mass respectively
+# fit pooled
+#(mean1, var1)=(3.225159, 0.1877358) and (mean2, var2)=(4.662897, 0.1877358), containing 39% and 61% of the mass respectively
 
-#temp<-wormbootGMM(100, 50, 2.985569, 0.4568056, 4.742767, 0.1239928, 0.58, 0)
-
-SeBootGMM<-wormbootGMM(100, 50, 3.3866, 0.05795, 4.74495, 0.05795, 0.654, 0)
+SeBootGMM<-wormbootGMM(100, 50, 3.225159, 0.1877358, 4.662897, 0.1877358, 0.61, 0)
 SeBootGMM$batch<-as.factor(SeBootGMM$batch)
-
-SeBootGMM.1.2<-wormbootGMM(100, 50, 3.3866, 0.05795, 4.74495, 0.05795, 0.654, 0.10)
-SeBootGMM.1.2$batch<-as.factor(SeBootGMM.1.2$batch)
-
-SeBootGMM.1.2.05<-wormbootGMM(100, 50, 3.3866, 0.05795, 4.74495, 0.05795, 0.654, 0.05)
-
-# change the data set labels to be less confusing
-SeBootGMM$set<-as.numeric(SeBootGMM$set)
-SeBootGMM<-as_tibble(SeBootGMM) %>%
-  mutate(set=replace(set, set=="A", 1)) %>%
-  mutate(set=replace(set, set=="B", 2))
-glimpse(SeBootGMM)
 SeBootGMM$set<-as.factor(SeBootGMM$set)
 
-SeBootGMM.1.2$set<-as.numeric(SeBootGMM.1.2$set)
-SeBootGMM.1.2<-as_tibble(SeBootGMM.1.2) %>%
-  mutate(set=replace(set, set=="A", 1)) %>%
-  mutate(set=replace(set, set=="B", 2))
-glimpse(SeBootGMM.1.2)
+SeBootGMM.1.2<-wormbootGMM(100, 50, 3.225159, 0.1877358, 4.662897, 0.1877358, 0.61, 0.1)
+SeBootGMM.1.2$batch<-as.factor(SeBootGMM.1.2$batch)
 SeBootGMM.1.2$set<-as.factor(SeBootGMM.1.2$set)
 
-SeBootGMM.1.2.05<-as_tibble(SeBootGMM.1.2.05) %>%
-  mutate(set=replace(set, set=="A", 1)) %>%
-  mutate(set=replace(set, set=="B", 2))
-glimpse(SeBootGMM.1.2)
+SeBootGMM.1.2.05<-wormbootGMM(100, 50, 3.225159, 0.1877358, 4.662897, 0.1877358, 0.61, 0.05)
+SeBootGMM.1.2.05$batch<-as.factor(SeBootGMM.1.2.05$batch)
+SeBootGMM.1.2.05$set<-as.factor(SeBootGMM.1.2.05$set)
+
 
 # Plot out each set of simulations and store as plot objects, to combine in figure
 pSeBootGMM<-SeBootGMM %>%
@@ -335,8 +349,10 @@ pSeBootGMM<-SeBootGMM %>%
   geom_violin(fill=NA) + 
   ylim(-0.1,6) +
   theme_classic() + 
+  scale_color_viridis_d(option="magma", begin=0.3, end=0.85)+
   theme(text=element_text(size=16), 
         axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=16),
         legend.position="none"
   ) + 
@@ -352,12 +368,14 @@ pSeBootGMM.1.2<-SeBootGMM.1.2 %>%
   geom_violin(fill=NA) + 
   ylim(-0.1,6) +
   theme_classic() + 
+  scale_color_viridis_d(option="magma", begin=0.3, end=0.85)+
   theme(text=element_text(size=16), 
         axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=16),
         legend.position="none"
   ) + 
-  labs(title="Pooled data parameterization, 15% difference in mode proportions", y=expression(log[10](CFU/worm)))+
+  labs(title="Pooled data parameterization, 10% difference in mode proportions", y=expression(log[10](CFU/worm)))+
   facet_wrap(~batch, nrow=1)+
   stat_compare_means(label.y=0.2)+
   stat_compare_means(method="t.test", label.y = 0.9)
@@ -369,8 +387,10 @@ pSeBootGMM.1.2.05<-SeBootGMM.1.2.05 %>%
   geom_violin(fill=NA) + 
   ylim(-0.1,6) +
   theme_classic() + 
+  scale_color_viridis_d(option="magma", begin=0.3, end=0.85)+
   theme(text=element_text(size=16), 
         axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
         plot.title=element_text(hjust=0.5, size=16),
         legend.position="none"
   ) + 
@@ -381,7 +401,7 @@ pSeBootGMM.1.2.05<-SeBootGMM.1.2.05 %>%
 pSeBootGMM.1.2.05
 
 plot_grid(pSeBootGMM, pSeBootGMM.1.2, pSeBootGMM.1.2.05, ncol=1, labels="AUTO")
-ggsave("FigS2_pSimSeGMM_day1v3.png", width=12, height=10, units="in", dpi=400)
+ggsave("FigS2_pSimSeGMM_run1v3.png", width=12, height=10, units="in", dpi=400)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
