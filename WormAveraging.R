@@ -149,29 +149,6 @@ SaSeCount2 %>%
   )
 
 
-#another version of this plot with the combined data as "Pooled"
-mylen<-dim(SaSeCount2)[1]
-SaSeCount2$Rep<-as.factor(SaSeCount2$Rep)
-SaSeTemp<-rbind(SaSeCount2, data.frame(Condition=SaSeCount2$Condition,
-                                  Rep=rep("Pooled", mylen),
-                                   Count=SaSeCount2$Count,
-                                   D=SaSeCount2$D,
-                                  CFU=SaSeCount2$CFU,
-                                   logCFU=SaSeCount2$logCFU
-))
-SaSeTemp %>%
-  ggplot(aes(x=Rep, y=logCFU, color=Rep)) +
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  geom_violin(fill=NA) + 
-  theme_classic() + 
-  scale_color_viridis_d(end=0.9)+
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        axis.text.x = element_blank(),
-        plot.title=element_text(hjust=0.5, size=14)) + 
-  facet_wrap(vars(Condition), scales="free_x")
-  #  labs(title=expression(paste(italic("S. enterica"), " LT2")), y="log10(CFU/worm)"
-#ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
