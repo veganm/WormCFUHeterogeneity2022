@@ -173,11 +173,152 @@ simBetaCFU<-function(a, b, nreps, K=100000){
 }
 
 
-
-
 #########################################################################################
 #########################################################################################
+# function wormSimBatchBetaCompare
+wormSimBatchBetaCompare<-function(a1, b1, a2, b2, runs, batches, maxCFU, prange=0){
+  #Function that simulates worm CFU data based on draws from beta distribution
+  # and compares simulated distributions using t-tests & Wilcoxon
+  #
+  # If prange is specified:
+  # Parameters for data sets A and B are re-drawn separately for each run with errors U(-prange, prange)
+  #
+  #a and b are underlying parameters of the beta distribution (double)
+  #runs is the number of runs in each simulation (integer)
+  #batches is the number of data points to generate for each run (integer)
+  #maxCFU is the maximum value you want for the CFU/worm synthetic data (number)
+  #return a data frame containing moments of data from each rep
+  #column "batch" is the batch size (1,5,10,20,50) as a factor
+  
+  #depends on
+  library(e1071)
+  
+  mydata<-data.frame(meanA=double(), 
+                     meanB=double(), 
+                     varA=double(), 
+                     varB=double(), 
+                     skewA=double(), 
+                     skewB=double(), 
+                     kurtA=double(), 
+                     kurtB=double(),
+                     stringsAsFactors = TRUE)
+  
+  pv1<-numeric(runs)
+  pv5<-numeric(runs)
+  pv10<-numeric(runs)
+  pv20<-numeric(runs)
+  pv50<-numeric(runs)
+  
+  wpv1<-numeric(runs)
+  wpv5<-numeric(runs)
+  wpv10<-numeric(runs)
+  wpv20<-numeric(runs)
+  wpv50<-numeric(runs)
+  
+  j<-1
+  while (j <= runs){
+    if (prange!=0){ #Has user specified randomized parameters?
+      prange1 <- -1*prange
+      a11<-a1+runif(1, min=prange1, max=prange)
+      a21<-a2+runif(1, min=prange1, max=prange)
+      b11<-b1+runif(1, min=prange1, max=prange)
+      b21<-b2+runif(1, min=prange1, max=prange)
+      #print(a11)
+      #print(a21)
+      #print(b11)
+      #print(b21)
+    } 
+    tempA<-rbeta(batches, a11, b11)*maxCFU
+    tempB<-rbeta(batches, a21, b21)*maxCFU
+    temp5A<-numeric(batches)
+    temp5B<-numeric(batches)
+    temp10A<-numeric(batches)
+    temp10B<-numeric(batches)
+    temp20A<-numeric(batches)
+    temp20B<-numeric(batches)
+    temp50A<-numeric(batches)
+    temp50B<-numeric(batches)
+    
+    for(k in 1:batches){
+      temp1<-rbeta(5, a11, b11)*maxCFU
+      temp5A[k]<-mean(temp1)
+      temp2<-rbeta(5, a21, b21)*maxCFU
+      temp5B[k]<-mean(temp2)
+      temp1<-rbeta(10, a11, b11)*maxCFU
+      temp10A[k]<-mean(temp1)
+      temp2<-rbeta(10, a21, b21)*maxCFU
+      temp10B[k]<-mean(temp2)
+      temp1<-rbeta(20, a11, b11)*maxCFU
+      temp20A[k]<-mean(temp1)
+      temp2<-rbeta(20, a21, b21)*maxCFU
+      temp20B[k]<-mean(temp2)
+      temp1<-rbeta(50, a11, b11)*maxCFU
+      temp50A[k]<-mean(temp1)
+      temp2<-rbeta(50, a21, b21)*maxCFU
+      temp50B[k]<-mean(temp2)
+    }  
+    #commit statistics to data frame
+    datacheck<-c(tempA, tempB, temp5A, temp5B, temp10A, temp10B, temp20A, temp20B, temp50A, temp50B)
+    if(sum(is.na(datacheck))==0){
+      mydata<-rbind(mydata, 
+                    data.frame(
+                      meanA=c(mean(tempA),mean(temp5A),mean(temp10A),mean(temp20A),mean(temp50A)),
+                      varA=c(var(tempA),var(temp5A),var(temp10A),var(temp20A),var(temp50A)),
+                      skewA=c(skewness(tempA),skewness(temp5A),skewness(temp10A),skewness(temp20A),skewness(temp50A)),
+                      kurtA=c(kurtosis(tempA),kurtosis(temp5A),kurtosis(temp5A),kurtosis(temp5A),kurtosis(temp5A)),
+                      meanB=c(mean(tempB),mean(temp5B),mean(temp10B),mean(temp20B),mean(temp50B)),
+                      varB=c(var(tempB),var(temp5B), var(temp10B), var(temp20B), var(temp50B)),
+                      skewB=c(skewness(tempB),skewness(temp5B), skewness(temp10B),skewness(temp20B),skewness(temp50B)),
+                      kurtB=c(kurtosis(tempB), kurtosis(temp5B), kurtosis(temp10B),kurtosis(temp20B), kurtosis(temp50B))
+                    ))
+      #t tests on data
+      test1<-t.test(tempA, tempB)
+      test5<-t.test(temp5A, temp5B)
+      test10<-t.test(temp10A, temp10B)
+      test20<-t.test(temp20A, temp20B)
+      test50<-t.test(temp50A, temp50B)
+      
+      #Mann-Whitney U tests
+      wtest1<-wilcox.test(tempA,tempB)
+      wtest5<-wilcox.test(temp5A, temp5B)
+      wtest10<-wilcox.test(temp10A, temp10B)
+      wtest20<-wilcox.test(temp20A, temp20B)
+      wtest50<-wilcox.test(temp50A, temp50B)
+      
+      pv1[j]<-test1$p.value
+      pv5[j]<-test5$p.value
+      pv10[j]<-test10$p.value
+      pv20[j]<-test20$p.value
+      pv50[j]<-test50$p.value
+      
+      wpv1[j]<-wtest1$p.value
+      wpv5[j]<-wtest5$p.value
+      wpv10[j]<-wtest10$p.value
+      wpv20[j]<-wtest20$p.value
+      wpv50[j]<-wtest50$p.value
+      
+      j<-j+1
+    }
+  }
+  t.pvals<-c(sum(pv1<0.05)/runs, sum(pv5<0.05)/runs, sum(pv10<0.05)/runs, sum(pv20<0.05)/runs, sum(pv50<0.05)/runs)
+  w.pvals<-c(sum(wpv1<0.05)/runs, sum(wpv5<0.05)/runs, sum(wpv10<0.05)/runs, sum(wpv20<0.05)/runs, sum(wpv50<0.05)/runs)
+  print(t.pvals)
+  print(w.pvals)
+  batchlist=c(1,5,10,20,50)
+  batch<-rep(batchlist,runs)
+  mydata$batch<-as.factor(batch)
+  return(mydata)
+}
+######################################################################################
+######################################################################################
 
+
+######################################################################################
+######################################################################################
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -195,10 +336,13 @@ library(sBIC)
 
 # Using data for SE and SA with all experimental runs, zeros removed, run IDs as integers 1-3
 # Combined data as "Pooled"
+# Data are loaded from file on line 92 of main script WormAveraging.R
+# The filtered object is created on line 124
+
 mylen<-dim(SaSeCount2)[1]
 SaSeCount2$Rep<-as.factor(SaSeCount2$Rep)
 SaSeCountPool<-rbind(SaSeCount2, data.frame(Condition=SaSeCount2$Condition,
-                                            Rep=rep("Pooled", mylen),
+                                            Rep=rep("Pooled", mylen), # add pooled condition
                                             Count=SaSeCount2$Count,
                                             D=SaSeCount2$D,
                                             CFU=SaSeCount2$CFU,
@@ -449,7 +593,7 @@ ggsave("FigS2_pSimSeGMM_run1v3.png", width=12, height=10, units="in", dpi=400)
 # Simulating "CFU" data: effects of variation and skew on false-negative rates 
 #
 # Calls function simBetaCFU()
-# to generate fake data based on the beta distribution
+# to generate simulated data based on the beta distribution
 # with a max of 5 logs CFU/individual (default)
 # Start with right hand skew:
 a<-0.1
@@ -495,8 +639,9 @@ write.table(SimBetaRHS.wtests, "SimBetaRHS_wtests.txt", sep="\t")
 
 # we will focus on X5 Beta(0.5, 2.5) and X10 Beta(1,5)
 # let's create batch data using wormSimBoot-based functions
-simBatchBetaR5<-wormSimBatchBeta(0.5, 2.5, 1000, 25, 100000)
-simBatchBetaR10<-wormSimBatchBeta(1, 5, 1000, 25, 100000)
+simBatchBetaR5<-wormSimBatchBetaCompare(0.5, 2.5, 0.5, 2.5, 1000, 25, 100000)
+simBatchBetaR10<-wormSimBatchBetaCompare(1, 5, 1, 5, 1000, 25, 100000)
+
 simBatchBetaR5v10<-wormSimBatchBetaCompare(0.5, 2.5, 1, 5, 1000, 25, 100000)
 simBatchBetaR5v20<-wormSimBatchBetaCompare(0.5, 2.5, 2, 10, 1000, 25, 100000)
 
@@ -516,7 +661,7 @@ pSimBetaLHS<- simBetaLHS %>%
 	plot.title=element_text(hjust=0.5, size=16)) + 
 	labs(title="Beta-distributed data", y="log10(CFU/worm)")
 pSimBetaLHS
-ggsave("pSimBetaLHS_5_1.png", width=6, height=4, units="in", dpi=300)
+#ggsave("pSimBetaLHS_5_1.png", width=6, height=4, units="in", dpi=300)
 
 # mean should be 100000*(5/6) = 83,333
 # and it's close across the board
@@ -533,17 +678,14 @@ simBetaLHS %>%
 #                 RUN-TO-RUN VARIATION     
 #
 # ok back to beta starting at B(1,5) why not
-# without much loss of generality let's draw factors from a U(0,1) each run
-# function is in wormSimBatchBetaRand.R
+# without much loss of generality let's draw parameter shifts from U(-0.1, 0.1) each run
 
-wormSimBetaRand.1.5<-wormSimBatchBetaRand(1,5,1000,24,100000)
-wormSimBetaRand.p5.2p5<-wormSimBatchBetaRand(0.5,2.5,1000,24,100000)
-wormSimBetaRand.5.1<-wormSimBatchBetaRand(5,1,1000,24,100000)
-wormSimBetaRand.2p5.p5<-wormSimBatchBetaRand(2.5,0.5,1000,24,100000)
-wormSimBetaRand.2p5.2p5<-wormSimBatchBetaRand(2.5,2.5,1000,24,100000)
-wormSimBetaRand.1.1<-wormSimBatchBetaRand(1,1,1000,24,100000)
-#mgenbeta(3, 1, 5, 1)
-#mgenbeta(3, 0.5, 2.5, 1)
+wormSimBetaRand.1.5<-wormSimBatchBetaCompare(1,5,1,5,1000,24,100000, 0.1)
+wormSimBetaRand.p5.2p5<-wormSimBatchBetaCompare(0.5,2.5,0.5,2.5,1000,24,100000, 0.1)
+wormSimBetaRand.5.1<-wormSimBatchBetaCompare(5,1,5,1,1000,24,100000, 0.1)
+wormSimBetaRand.2p5.p5<-wormSimBatchBetaCompare(2.5,0.5,2.5,0.5,1000,24,100000, 0.1)
+wormSimBetaRand.2p5.2p5<-wormSimBatchBetaCompare(2.5,2.5,2.5,2.5,1000,24,100000, 0.1)
+wormSimBetaRand.1.1<-wormSimBatchBetaCompare(1,1,1,1,1000,24,100000, 0.1)
 
 # calculate CV; include the distances
 wormSimBetaRand.1.5$meandist<-abs(wormSimBetaRand.1.5$meanA-wormSimBetaRand.1.5$meanB)/(wormSimBetaRand.1.5$meanA+wormSimBetaRand.1.5$meanB)
@@ -554,7 +696,7 @@ wormSimBetaRand.1.5$skewdist<-abs(wormSimBetaRand.1.5$skewA-wormSimBetaRand.1.5$
 wormSimBetaRand.1.5$kurtdist<-abs(wormSimBetaRand.1.5$kurtA-wormSimBetaRand.1.5$kurtB)
 
 # Flip the data set around so it can get factor-gridded
-wormSimBetaRand.1.5_A<-as.tibble(wormSimBetaRand.1.5) %>%
+wormSimBetaRand.1.5_A<-as_tibble(wormSimBetaRand.1.5) %>%
   select(batch, meanA, cvA, skewA, kurtA) %>%
   rename(mean=meanA,
          cv=cvA,
@@ -562,7 +704,7 @@ wormSimBetaRand.1.5_A<-as.tibble(wormSimBetaRand.1.5) %>%
          kurt=kurtA)
 wormSimBetaRand.1.5_A$set<-"A"
 
-wormSimBetaRand.1.5_B<-as.tibble(wormSimBetaRand.1.5) %>%
+wormSimBetaRand.1.5_B<-as_tibble(wormSimBetaRand.1.5) %>%
   select(batch, meanB, cvB, skewB, kurtB) %>%
   rename(mean=meanB,
          cv=cvB,
@@ -570,7 +712,7 @@ wormSimBetaRand.1.5_B<-as.tibble(wormSimBetaRand.1.5) %>%
          kurt=kurtB)
 wormSimBetaRand.1.5_B$set<-"B"
 
-wormSimBetaRand.1.5_dist<-as.tibble(wormSimBetaRand.1.5) %>%
+wormSimBetaRand.1.5_dist<-as_tibble(wormSimBetaRand.1.5) %>%
   select(batch, meandist, cvdist, skewdist, kurtdist) %>%
   rename(mean=meandist,
          cv=cvdist,
@@ -591,6 +733,7 @@ pSimBatchBetaRand.1.5.AB<-wormSimBetaRand.1.5_long %>%
   pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
   ggplot(aes(x=batch, y=value, color=batch))+
   geom_violin(fill=NA) + theme_classic() + 
+  scale_color_viridis_d(begin=0.3, end=0.8) +  
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(),  legend.position="none",
@@ -603,7 +746,9 @@ pSimBatchBetaRand.1.5.dist<-wormSimBetaRand.1.5_dist %>%
   rename(average=mean) %>%
   pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
   ggplot(aes(x=batch, y=value, color=batch))+
-  geom_violin(fill=NA) + theme_classic() + 
+  geom_violin(fill=NA) + 
+  theme_classic() + 
+  scale_color_viridis_d(begin=0.3, end=0.8) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(),  legend.position="none",
@@ -612,14 +757,14 @@ pSimBatchBetaRand.1.5.dist<-wormSimBetaRand.1.5_dist %>%
   facet_grid(rows=vars(moment), cols=vars(set), scales="free_y") 
 
 plot_grid(pSimBatchBetaRand.1.5.AB, pSimBatchBetaRand.1.5.dist, ncol=2, rel_widths = c(2,1), labels="AUTO")
-ggsave("Fig3_pSimBatchBetaRand.1.5.moments.png", width=12, height=10, units="in", dpi=400)      
+ggsave("FigS4_pSimBatchBetaRand.1.5.moments.png", width=12, height=10, units="in", dpi=400)      
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #################     FIGURE S5     #############################
 #### add data from symmetric distribution for comparison
 #note these runs use the flat U(-0.1,0.1) parameter error
-wormSimBetaRand.5.5<-wormSimBatchBetaRand(5,5,1000,24,100000)
+wormSimBetaRand.5.5<-wormSimBatchBetaCompare(5,5,5,5,1000,24,100000, 0.1)
 wormSimBetaRand.5.5$cvA<-sqrt(wormSimBetaRand.5.5$varA)/wormSimBetaRand.1.5$meanA
 wormSimBetaRand.5.5$cvB<-sqrt(wormSimBetaRand.5.5$varB)/wormSimBetaRand.1.5$meanB
 wormSimBetaRand.5.5$cvdist<-abs(wormSimBetaRand.5.5$cvA-wormSimBetaRand.1.5$cvB)
@@ -628,18 +773,21 @@ wormSimBetaRand.5.5$meandist<-abs(wormSimBetaRand.5.5$meanA-wormSimBetaRand.5.5$
 pSimBatchBetaRand.1.5.meanA<-wormSimBetaRand.1.5 %>%
   ggplot(aes(x=batch, y=log10(meanA), color=batch))+
   geom_violin(fill=NA) + theme_classic() + 
-  ylim(4.1, 5)+
+ # ylim(3.8, 5)+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
+  scale_color_viridis_d(begin=0.3, end=0.8) +
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(),  
         legend.position="none",
         plot.title=element_text(hjust=0.5, size=14)) + 
   labs(title=paste("\u03b2","(1,5) A", sep=""), y="Mean")
+#pSimBatchBetaRand.1.5.meanA
 
 pSimBatchBetaRand.1.5.meandist<-wormSimBetaRand.1.5 %>%
   ggplot(aes(x=batch, y=meandist, color=batch))+
   geom_violin(fill=NA) + theme_classic() + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
+  scale_color_viridis_d(begin=0.3, end=0.8) +
   ylim(-0.01,0.45)+
   theme(text=element_text(size=14), 
         #axis.title.x = element_blank(), 
@@ -650,7 +798,8 @@ pSimBatchBetaRand.1.5.meandist<-wormSimBetaRand.1.5 %>%
 pSimBatchBetaRand.5.5.meanA<-wormSimBetaRand.5.5 %>%
   ggplot(aes(x=batch, y=log10(meanA), color=batch))+
   geom_violin(fill=NA) + theme_classic() + 
-  ylim(4.1, 5)+
+ # ylim(3.8, 5)+
+  scale_color_viridis_d(begin=0.3, end=0.8) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(),  
@@ -663,6 +812,7 @@ pSimBatchBetaRand.5.5.meandist<-wormSimBetaRand.5.5 %>%
   geom_violin(fill=NA) + theme_classic() + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   ylim(-0.01,0.45)+
+  scale_color_viridis_d(begin=0.3, end=0.8) +
   theme(text=element_text(size=14), 
         #axis.title.x = element_blank(), 
         legend.position="none",
