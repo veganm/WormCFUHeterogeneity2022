@@ -219,10 +219,10 @@ wormSimBatchBetaCompare<-function(a1, b1, a2, b2, runs, batches, maxCFU, prange=
   while (j <= runs){
     if (prange!=0){ #Has user specified randomized parameters?
       prange1 <- -1*prange
-      a11<-a1+runif(1, min=prange1, max=prange)
-      a21<-a2+runif(1, min=prange1, max=prange)
-      b11<-b1+runif(1, min=prange1, max=prange)
-      b21<-b2+runif(1, min=prange1, max=prange)
+      a11<-a1*(1++runif(1, min=prange1, max=prange))
+      a21<-a2*(1++runif(1, min=prange1, max=prange))
+      b11<-b1*(1++runif(1, min=prange1, max=prange))
+      b21<-b2*(1++runif(1, min=prange1, max=prange))
       #print(a11)
       #print(a21)
       #print(b11)
@@ -684,6 +684,7 @@ wormSimBetaRand.1.5<-wormSimBatchBetaCompare(1,5,1,5,1000,24,100000, 0.1)
 wormSimBetaRand.p5.2p5<-wormSimBatchBetaCompare(0.5,2.5,0.5,2.5,1000,24,100000, 0.1)
 wormSimBetaRand.5.1<-wormSimBatchBetaCompare(5,1,5,1,1000,24,100000, 0.1)
 wormSimBetaRand.2p5.p5<-wormSimBatchBetaCompare(2.5,0.5,2.5,0.5,1000,24,100000, 0.1)
+wormSimBetaRand.5.5<-wormSimBatchBetaCompare(5,5,5,5,1000,24,100000, 0.1)
 wormSimBetaRand.2p5.2p5<-wormSimBatchBetaCompare(2.5,2.5,2.5,2.5,1000,24,100000, 0.1)
 wormSimBetaRand.1.1<-wormSimBatchBetaCompare(1,1,1,1,1000,24,100000, 0.1)
 
@@ -837,8 +838,8 @@ ggsave("FigS5_pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=6, units=
 #"medium" 200 worms max 24 digests
 #"large" 500 worms max 48 digests
 
-a<-4
-b<-4
+a<-1
+b<-5
 (a*b)/((a+b+1)*(a+b)^2)
 2*(b-a)*sqrt(a+b+1)/(sqrt(a*b)*(a+b+2))
 
