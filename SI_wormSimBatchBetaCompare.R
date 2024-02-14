@@ -134,3 +134,4 @@ wormSimBatchBetaCompare<-function(a1, b1, a2, b2, runs, batches, maxCFU, prange=
   mydata$batch<-as.factor(batch)
   return(mydata)
 }
+
