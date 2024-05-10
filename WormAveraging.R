@@ -1,4 +1,4 @@
-pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, readxl)
+pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, readxl, patchwork)
 xTextSize<-14
 
 #############################################################################
@@ -69,7 +69,7 @@ wormbootOnCounts<-function(reps, mydata, Dcorrect){
 
 BatchDigests<-read.table("batchdigests.txt", header=TRUE)
 BatchDigests$Batch<-as.factor(BatchDigests$Batch)
-pBatchSA<-subset(BatchDigests) %>%
+pBatchSA<-BatchDigests %>%
   ggplot(aes(x=Batch, y=logCFU, color=Batch)) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + theme_classic() + 
@@ -80,7 +80,7 @@ pBatchSA<-subset(BatchDigests) %>%
         axis.title.y = element_text(size=xTextSize),
         axis.text.y = element_text(size=xTextSize-1),
         legend.text = element_text(size=xTextSize-1),
-        legend.position=c(0.9,0.3)) + 
+        legend.position.inside=c(0.9,0.3)) + 
   labs(title=expression(paste(italic("S. aureus"), " Newman")), y=expression(log[10](CFU/Worm)))
 pBatchSA
 #ggsave("pBatchSA.png", width=4, height=3, units="in", dpi=300)
@@ -101,9 +101,7 @@ SaSeCount %>%
     axis.title.x = element_blank(), 
     plot.title=element_text(hjust=0.5,size=14),
     legend.position = "none") +
-  facet_wrap(vars(Condition), scales="free_x") +
-  labs(y="log10(CFU/worm)", x="Replicate")
-#ggsave("pSaSeLogCFUByReplicate.png", width=8, height=5, units="in", dpi=400)
+  facet_wrap(vars(Condition), scales="free_x")
 
 # summary statistics
 SaSeCount %>%
@@ -120,7 +118,7 @@ SaSeCount %>%
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #take out the zeros
 SaSeCount2<-SaSeCount
-SaSeCount2[SaSeCount2==0]<-NA
+SaSeCount2$Count[SaSeCount2$Count==0]<-NA
 SaSeCount2<-SaSeCount2[complete.cases(SaSeCount2),]
 
 SaSeCount2 %>%
@@ -134,7 +132,7 @@ SaSeCount2 %>%
 	  plot.title=element_text(hjust=0.5,size=14),
   	legend.title = element_blank()) +
   facet_wrap(vars(Condition), scales="free_x")+
-  labs(y="log10(CFU/worm)", x="Replicate")
+  labs(y=expression(log[10](CFU/worm)), x="Replicate")
 	
 # summary statistics
 SaSeCount2 %>%
@@ -156,12 +154,11 @@ SaSeCount2 %>%
 #
 # here we will call the wormboot function (wormbootOnCounts)
 # to generate simulated data and make comparisons
-# 25 reps as usual
 
 temp1<-SaSeCount %>%
-  filter(Condition=="SE" & Rep=="1")
+  dplyr::filter(Condition=="SE" & Rep=="1")
 temp2<-SaSeCount %>%
-  filter(Condition=="SE" & Rep=="2")
+  dplyr::filter(Condition=="SE" & Rep=="2")
 
 # summary statistics
 mean(temp1$CFU)
@@ -169,8 +166,8 @@ median(temp1$CFU)
 mean(temp2$CFU)
 median(temp2$CFU)
 
-SeBoot1<-wormbootOnCounts(41, temp1, 20)
-SeBoot2<-wormbootOnCounts(29, temp2, 20)
+SeBoot1<-wormbootOnCounts(dim(temp1)[1], temp1, 20)
+SeBoot2<-wormbootOnCounts(dim(temp2)[1], temp2, 20)
 SeBoot1$Rep<-as.factor("Rep1")
 SeBoot2$Rep<-as.factor("Rep2")
 jointSeBoot<-rbind(SeBoot1, SeBoot2)
@@ -179,6 +176,7 @@ pJointSEBoot<-jointSeBoot %>%
 	ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
 	geom_violin(fill=NA) + 
+  geom_hline(yintercept=log10(20), color="black", lty="dashed")+
 	ylim(-0.1,6.2) + 
   theme_classic() +
   scale_color_viridis_d(begin=0.3, end=0.8) +
@@ -189,16 +187,16 @@ pJointSEBoot<-jointSeBoot %>%
 	  axis.text.y = element_text(size=xTextSize-1),
 	  axis.title.y = element_text(size=xTextSize),
 	  plot.title=element_text(hjust=0.5,size=xTextSize),
-	  legend.position=c(0.9,0.3),
+	  #legend.position.inside=c(0.9,0.3),
 	  legend.title = element_blank(),
 	  legend.text = element_text(size=xTextSize-1)
 	  )+
   facet_wrap(vars(Batch), ncol=5)+
-	labs(x="Replicate", y=expression(log[10](CFU/Worm)))+
+  labs(title=expression(paste(italic("S. enterica"), " Simulated Batch Digests")), 
+       y=expression(log[10](CFU/Worm)), x="Replicate")+
   stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot
-#ggsave("pSeBootTwoRepsByColonies_unpruned_ByReplicate.png", width=8, height=5, units="in", dpi=400)
 
 #and some statistical tests on the bootstrapped data
 t.test(SeBoot1$logCFU[SeBoot1$Batch==1], SeBoot2$logCFU[SeBoot2$Batch==1])
@@ -207,14 +205,128 @@ t.test(SeBoot1$logCFU[SeBoot1$Batch==10], SeBoot2$logCFU[SeBoot2$Batch==10])
 t.test(SeBoot1$logCFU[SeBoot1$Batch==20], SeBoot2$logCFU[SeBoot2$Batch==20])
 t.test(SeBoot1$logCFU[SeBoot1$Batch==50], SeBoot2$logCFU[SeBoot2$Batch==50])
 
+# and tests for normality
+# Shapiro-Wilk
+shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==1])
+shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==5])
+shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==10])
+shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==20])
+shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==50])
+shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==1])
+shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==5])
+shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==10])
+shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==20])
+shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==50])
+rm(SeBoot1, SeBoot2, temp1, temp2)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# same SE bootstrap with zeros set to TOD
+temp<-dplyr::filter(SaSeCount, Condition=="SE")
+idx<-which(temp$Count==0)
+temp$Count[idx]<-1
+temp$CFU[idx]<-20
+temp$logCFU[idx]<-log10[20]
+
+temp1A<-temp %>%
+  dplyr::filter(Rep=="1")
+temp2A<-temp %>%
+  dplyr::filter(Rep=="2")
+
+SeBoot1A<-wormbootOnCounts(dim(temp1A)[1], temp1A, 20)
+SeBoot2A<-wormbootOnCounts(dim(temp2A)[1], temp2A, 20)
+SeBoot1A$Rep<-as.factor("Rep1")
+SeBoot2A$Rep<-as.factor("Rep2")
+jointSeBoot_nozeros<-rbind(SeBoot1A, SeBoot2A)
+#rm(SeBoot1A, SeBoot2A, temp1A, temp2A)
+
+pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
+  dplyr::filter(Batch<20) %>% # sufficient to make the point
+  ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_violin(fill=NA) + 
+  ylim(-0.1,6.2) + 
+  theme_classic() +
+  scale_color_viridis_d(begin=0.3, end=0.8) +
+  theme(
+    text=element_text(size=xTextSize), 
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size=xTextSize-1),
+    axis.title.y = element_text(size=xTextSize),
+    plot.title=element_text(hjust=0.5,size=xTextSize),
+    #legend.position.inside=c(0.9,0.3),
+    legend.title = element_blank(),
+    legend.text = element_text(size=xTextSize-1)
+  )+
+  facet_wrap(vars(Batch), ncol=5)+
+  labs(title="Zeros removed", x="Replicate", y=expression(log[10](CFU/Worm)))+
+  stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
+  stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
+pJointSEBoot_nozeros
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# and with extra zeros
+
+# implemented as higher TOD, call it 10^3
+temp<-dplyr::filter(SaSeCount, Condition=="SE")
+idx<-which(temp$logCFU<3)
+temp$Count[idx]<-0
+temp$D[idx]<-0
+temp$CFU[idx]<-0
+temp$logCFU[idx]<-0
+
+temp1B<-temp %>%
+  dplyr::filter(Rep=="1")
+temp2B<-temp %>%
+  dplyr::filter(Rep=="2")
+
+SeBoot1B<-wormbootOnCounts(dim(temp1B)[1], temp1B, 20)
+SeBoot2B<-wormbootOnCounts(dim(temp2B)[1], temp2B, 20)
+SeBoot1B$Rep<-as.factor("Rep1")
+SeBoot2B$Rep<-as.factor("Rep2")
+jointSeBoot_zeros3<-rbind(SeBoot1B, SeBoot2B)
+rm(SeBoot1B, SeBoot2B, temp1B, temp2B, temp)
+
+pJointSEBoot_zeros3<-jointSeBoot_zeros3 %>%
+  dplyr::filter(Batch<20) %>% # sufficient to make the point
+  ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_violin(fill=NA) + 
+  geom_hline(yintercept=3, color="black", lty="dashed")+
+  ylim(-0.1,6.2) + 
+  theme_classic() +
+  scale_color_viridis_d(begin=0.3, end=0.8) +
+  theme(
+    text=element_text(size=xTextSize), 
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size=xTextSize-1),
+    axis.title.y = element_text(size=xTextSize),
+    plot.title=element_text(hjust=0.5,size=xTextSize),
+    #legend.position.inside=c(0.9,0.3),
+    legend.title = element_blank(),
+    legend.text = element_text(size=xTextSize-1)
+  )+
+  facet_wrap(vars(Batch), ncol=5)+
+  labs(title="Zero-enriched", x="Replicate", y=expression(log[10](CFU/Worm)))+
+  stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
+  stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
+pJointSEBoot_zeros3
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~    Build Figure 1
 # Plot out SE bootstraps together with real data from S. aureus batch size experiment
-plot_grid(pBatchSA, pJointSEBoot, labels="AUTO", ncol=2, rel_widths=c(1,3))
+#Fig1AB<-plot_grid(pBatchSA, pJointSEBoot, labels="AUTO", ncol=2, rel_widths=c(1,3))
+#Fig1CD<-plot_grid(pJointSEBoot_nozeros, pJointSEBoot_zeros3, labels=c("C", "D"), ncol=2)
+#plot_grid(Fig1AB, Fig1CD, ncol=1)
 
-#ggsave("pjointSeBoot.svg", width=9, height=4, units="in", dpi=300)
-ggsave("Fig1_pSaBatchJointSeBoot.png", width=10, height=4, units="in", dpi=400)
+(pBatchSA + pJointSEBoot + plot_layout(ncol=2, widths=c(1,3))) /
+  (pJointSEBoot_nozeros + pJointSEBoot_zeros3 + plot_layout(ncol=2)) +
+  plot_layout(guides="collect")+
+  plot_annotation(tag_levels = 'A')
+
+ggsave("Fig1_pSaBatchJointSeBoot.png", width=12, height=8, units="in", dpi=400)
 
 # and some summary statistics for the record
 mean(BatchDigests$CFU[BatchDigests$Species=="SA" & BatchDigests$Batch==1 ])
