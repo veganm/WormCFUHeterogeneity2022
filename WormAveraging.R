@@ -1,19 +1,32 @@
 pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, readxl, patchwork)
 xTextSize<-14
 
+# This code was produced and run with
+# R 4.4.0 running in Rstudio 2024.04.0 build 735
+# using Tidyverse 2.2.0
+# and other packages 
+# e1071 1.7-14
+# ggplot2 3.5.1
+# ggpubr 0.6.0
+# mclust 6.1.1
+# patchwork 1.2.0
+# readxl 1.4.3
+
 #############################################################################
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # FUNCTIONS
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 wormbootOnCounts<-function(reps, mydata, Dcorrect){
-  # Expects a number of reps for the bootstrap (reps)
+  # Expects a number of replicates for the bootstrap (reps)
   # and a data frame of worm CFU data for individuals (mydata)
   # where the number of colonies counted is in column "Count"
   # the dilution at which these colonies were measured is in column "D"
   # and the CFU/worm is in column "CFU"
   #
   ## The dilution correction factor (numeric) is given as "Dcorrect"
+  # and is the ratio of the original volume and the volume plated
+  # e.g. for 10 uL spots and an original volume of 1 mL, Dcorrect = 100
   # 
   # Returns a data frame of simulated batch digests
   # with batch sizes 1, 5, 10, 20, 50 worms/batch
