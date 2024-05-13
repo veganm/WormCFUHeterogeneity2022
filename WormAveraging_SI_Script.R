@@ -3,6 +3,7 @@
 pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, readxl, patchwork, sBIC)
 
 # Note that functions are in separate files
+# and that this code relies on data objects from the main text script (WormAveraging_MAIN.R)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #                       Section 1: 
@@ -637,33 +638,170 @@ plot_grid(pSimBatchBetaRand.1.5.meanA, pSimBatchBetaRand.1.5.mean3days, pSimBatc
 ggsave("pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=8, units="in")
 
 
-###########  What if we increase the number of replicates?
-
-wormSim10.5.5.m.means<-wormSimBatchBeta3(5,5,100000,1200,24,10,1000)
-wormSim10.1.5.m.means<-wormSimBatchBeta3(1,5,100000,1200,24,10,1000)
-
-wormSim25.5.5.m.means<-wormSimBatchBeta3(5,5,100000,1200,24,25,1000)
-wormSim25.1.5.m.means<-wormSimBatchBeta3(1,5,100000,1200,24,25,1000)
-
-
-################# NOT CURRENTLY USING ##############################
-pwormSim3.1.5.s.batch1<-subset(wormSim3.1.5.s, batch==1) %>%
-  ggplot(aes(x=set, y=logCFU, color=set)) + theme_classic() +
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  #    geom_violin(fill=NA) +  
+###########  What if we instead take the populations of means in regressions?
+wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, maxCFU=100000)
+glimpse(wormSimF.1.5)
+wormSimF.1.5$run<-as.factor(wormSimF.1.5$run)
+wormSimF.1.5 %>%
+ ggplot(aes(x=factor(batch), y=logCFU, color=run)) + 
+  geom_violin(fill=NA) + 
+  geom_point(shape=16, position=position_jitterdodge(0.2)) +
+  ylim(1,5) + theme_classic() + 
+  scale_color_viridis_d(option="mako", end=0.8)+
   theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        plot.title=element_text(hjust=0.5, size=14)) + 
-  labs(title="1", y="log10(CFU/worm)")
-pwormSim3.1.5.s.batch1
+        #axis.title.x = element_blank(), 
+        plot.title=element_text(hjust=0.5),
+  ) + 
+  facet_wrap(~set)+
+  labs(title="Simulated data, Beta(1,5)", 
+       x="Batch size",
+       y=expression(log[10](Bacteria)),
+       color="Replicate")
 
-pwormSim3.1.5.l.batch1<-subset(wormSim3.1.5.l, batch==1) %>%
-  ggplot(aes(x=set, y=logCFU, color=set)) + theme_classic() +
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  #    geom_violin(fill=NA) +  
+# put through GLM
+wormsimF.1.5.glm.single<-wormSimF.1.5 %>%
+  dplyr::filter(batch==1) %>%
+  glm(logCFU~run*set, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.single)
+
+# checks
+plot(density(resid(wormsimF.1.5.glm.single, type='deviance')))
+scatter.smooth(1:length(rstandard(wormsimF.1.5.glm.single, type='deviance')), rstandard(wormsimF.1.5.glm.single, type='deviance'), col='gray')
+scatter.smooth(predict(wormsimF.1.5.glm.single, type='response'), #residuals vs fitted
+               rstandard(wormsimF.1.5.glm.single, type='deviance'), col='gray')
+
+wormsimF.1.5.glm.batch5<-wormSimF.1.5 %>%
+  dplyr::filter(batch==5) %>%
+  glm(logCFU~run*set, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch5)
+
+wormsimF.1.5.glm.batch10<-wormSimF.1.5 %>%
+  dplyr::filter(batch==10) %>%
+  glm(logCFU~run*set, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch10)
+
+wormsimF.1.5.glm.batch20<-wormSimF.1.5 %>%
+  dplyr::filter(batch==20) %>%
+  glm(logCFU~run*set, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch20)
+
+wormsimF.1.5.glm.batch50<-wormSimF.1.5 %>%
+  dplyr::filter(batch==50) %>%
+  glm(logCFU~run*set, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch50)
+
+# and the symmetric data
+wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, reps=24, maxCFU=100000)
+glimpse(wormSimF.5.5)
+wormSimF.5.5$run<-as.factor(wormSimF.5.5$run)
+wormSimF.5.5 %>%
+  ggplot(aes(x=factor(batch), y=logCFU, color=run)) + 
+  geom_violin(fill=NA) + 
+  geom_point(shape=16, position=position_jitterdodge(0.2)) +
+  ylim(1,5) + theme_classic() + 
+  scale_color_viridis_d(option="mako", end=0.8)+
   theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), 
-        plot.title=element_text(hjust=0.5, size=14)) + 
-  labs(title="1", y="log10(CFU/worm)")
-pwormSim3.1.5.l.batch1
+        #axis.title.x = element_blank(), 
+        plot.title=element_text(hjust=0.5),
+  ) + 
+  facet_wrap(~set)+
+  labs(title="Simulated data, Beta(5,5)", 
+       x="Batch size",
+       y=expression(log[10](Bacteria)),
+       color="Replicate")
 
+
+# Compare glm and Wilcoxon false positives
+# with three runs as above
+# here we use enough worms to allow 24 batches even at 50 worms
+wormSim3.5.5.m.means<-wormSimBatchBeta3(5,5,100000,1200,24,1000)
+wormSim3.5.5.m.means$batch<-as.factor(wormSim3.5.5.m.means$batch)
+# Wilcoxon p-values
+#[1] 0.096 0.232 0.372 0.461 0.592
+# glm p-values for runB term
+#[1] 0.108 0.282 0.368 0.500 0.641
+
+wormSim3.1.5.m.means<-wormSimBatchBeta3(1,5,100000,1200,24,1000)
+wormSim3.1.5.m.means$batch<-as.factor(wormSim3.1.5.m.means$batch)
+# Wilcoxon
+#0.061 0.120 0.199 0.310 0.449
+# glm
+# 0.044 0.114 0.230 0.335 0.492
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# summarize the simulated factorial data
+wormSimF.1.5.summary<-wormSimF.1.5 %>%
+  group_by(set, batch, run) %>%
+  summarize(meanCFU=mean(CFU, na.rm=TRUE),
+            varCFU=var(CFU, na.rm=TRUE),
+            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
+            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
+            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
+            n=n()
+            )
+view(wormSimF.1.5.summary)
+
+wormSimF.1.5.summary %>%
+  ggplot(aes(x=batch, y=varCFU))+
+  geom_point()+
+  scale_y_log10()
+
+wormSimF.5.5.summary<-wormSimF.5.5 %>%
+  group_by(set, batch, run) %>%
+  summarize(meanCFU=mean(CFU, na.rm=TRUE),
+            varCFU=var(CFU, na.rm=TRUE),
+            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
+            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
+            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
+            n=n()
+  )
+view(wormSimF.5.5.summary)
+wormSimF.5.5.summary %>%
+  ggplot(aes(x=batch, y=varCFU))+
+  geom_point()+
+  scale_y_log10()
+
+wormSimF.5.5.summary$Distribution<-"Beta(5,5)"
+wormSimF.1.5.summary$Distribution<-"Beta(1,5)"
+wormSimF.summary<-rbind(wormSimF.1.5.summary, wormSimF.5.5.summary)
+wormSimF.summary %>%
+  ggplot(aes(x=batch, y=varCFU, color=factor(Distribution)))+
+  geom_jitter(width=1)+
+  scale_y_log10()
+
+# messing with distributions of effort
+tempF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, runs=5, reps=10, maxCFU=100000)
+tempF.1.5$run<-as.factor(tempF.1.5$run)
+tempF.1.5.summary<-tempF.1.5 %>%
+  group_by(set, batch, run) %>%
+  summarize(meanCFU=mean(CFU, na.rm=TRUE),
+            varCFU=var(CFU, na.rm=TRUE),
+            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
+            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
+            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
+            n=n()
+  )
+tempF.1.5.summary$Distribution<-"Beta(1,5)"
+
+tempF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, runs=5, reps=10, maxCFU=100000)
+tempF.5.5$run<-as.factor(tempF.5.5$run)
+tempF.5.5.summary<-tempF.5.5 %>%
+  group_by(set, batch, run) %>%
+  summarize(meanCFU=mean(CFU, na.rm=TRUE),
+            varCFU=var(CFU, na.rm=TRUE),
+            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
+            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
+            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
+            n=n()
+  )
+tempF.5.5.summary$Distribution<-"Beta(5,5)"
+tempF.summary<-rbind(tempF.1.5.summary, tempF.5.5.summary)
+tempF.summary %>%
+  ggplot(aes(x=batch, y=varCFU, color=factor(Distribution)))+
+  geom_jitter(width=1)+
+  scale_y_log10()
+
+tempF.summary %>%
+  ggplot(aes(x=batch, y=meanCFU, color=factor(Distribution)))+
+  geom_jitter(width=1)+
+  scale_y_log10()
