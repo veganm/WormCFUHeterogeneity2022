@@ -251,7 +251,6 @@ SeBoot2A<-wormbootOnCounts(dim(temp2A)[1], temp2A, 20)
 SeBoot1A$Rep<-as.factor("Rep1")
 SeBoot2A$Rep<-as.factor("Rep2")
 jointSeBoot_nozeros<-rbind(SeBoot1A, SeBoot2A)
-#rm(SeBoot1A, SeBoot2A, temp1A, temp2A)
 
 pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
   dplyr::filter(Batch<20) %>% # sufficient to make the point
@@ -278,6 +277,8 @@ pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot_nozeros
 
+rm(SeBoot1A, SeBoot2A, temp1A, temp2A)
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # and with extra zeros
 
@@ -299,7 +300,6 @@ SeBoot2B<-wormbootOnCounts(dim(temp2B)[1], temp2B, 20)
 SeBoot1B$Rep<-as.factor("Rep1")
 SeBoot2B$Rep<-as.factor("Rep2")
 jointSeBoot_zeros3<-rbind(SeBoot1B, SeBoot2B)
-rm(SeBoot1B, SeBoot2B, temp1B, temp2B, temp)
 
 pJointSEBoot_zeros3<-jointSeBoot_zeros3 %>%
   dplyr::filter(Batch<20) %>% # sufficient to make the point
@@ -326,6 +326,8 @@ pJointSEBoot_zeros3<-jointSeBoot_zeros3 %>%
   stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot_zeros3
+
+rm(SeBoot1B, SeBoot2B, temp1B, temp2B, temp)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -432,6 +434,7 @@ WormReps.big %>%
 	theme(text=element_text(size=14), axis.title.x = element_blank(), legend.position="none", plot.title=element_text(hjust=0.5, size=16)) +
 	labs(title="Totals", y=expression(log[10](CFU/Worm)))
 
+rm(temp, temp2)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -705,7 +708,7 @@ mean(temp1A$CFU)
 sd(temp1A$CFU)/mean(temp1A$CFU)
 skewness(temp1A$CFU)
 
-# here we will call the wormboot function (wormbootOnCounts.R)
+# here we will call the wormboot function (wormbootOnCounts)
 # to generate simulated data and make comparisons
 # 22 data points to match the smallest data set (N2)
 # batch 50 is pretty large for these data so we'll stop at 20
@@ -736,6 +739,18 @@ pjointBootA<-jointTempBootA  %>%
   stat_compare_means(aes(label = paste0("p = ", after_stat(p.format))),
                      label.x = 1, size=4)
 pjointBootA
+
+# some tests for normality just b/c
+shapiro.test(tempBoot1A$logCFU[tempBoot1A$Batch==1])
+shapiro.test(tempBoot1A$logCFU[tempBoot1A$Batch==5])
+shapiro.test(tempBoot1A$logCFU[tempBoot1A$Batch==10])
+shapiro.test(tempBoot1A$logCFU[tempBoot1A$Batch==20])
+shapiro.test(tempBoot1A$logCFU[tempBoot1A$Batch==50])
+shapiro.test(tempBoot2A$logCFU[tempBoot2A$Batch==1])
+shapiro.test(tempBoot2A$logCFU[tempBoot2A$Batch==5])
+shapiro.test(tempBoot2A$logCFU[tempBoot2A$Batch==10])
+shapiro.test(tempBoot2A$logCFU[tempBoot2A$Batch==20])
+shapiro.test(tempBoot2A$logCFU[tempBoot2A$Batch==50])
 
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ######   Second set (SE vs N2 Multi 2/13/19)  ########
@@ -786,6 +801,15 @@ pJointBootB<- jointTempBootB  %>%
 pJointBootB
 
 plot_grid(pjointBootA, pJointBootB, labels="AUTO", ncol=1)
+
+shapiro.test(tempBoot1B$logCFU[tempBoot1B$Batch==1])
+shapiro.test(tempBoot1B$logCFU[tempBoot1B$Batch==5])
+shapiro.test(tempBoot1B$logCFU[tempBoot1B$Batch==10])
+shapiro.test(tempBoot1B$logCFU[tempBoot1B$Batch==20])
+shapiro.test(tempBoot1B$logCFU[tempBoot1B$Batch==50])
+shapiro.test(tempBoot2B$logCFU[tempBoot2B$Batch==5])
+shapiro.test(tempBoot2B$logCFU[tempBoot2B$Batch==10])
+
 #ggsave("pjointSeBoot.svg", width=9, height=4, units="in", dpi=300)
 ggsave("Fig3_pjointFalseNegativeBoot.png", width=10, height=7, units="in", dpi=300)
 
