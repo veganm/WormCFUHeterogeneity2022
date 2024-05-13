@@ -14,20 +14,27 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
                      batch=double(), 
                      run=double(),
                      stringsAsFactors = TRUE)
-  
+
+    # someplace to put p-values for Wilcoxon tests
   wpv1<-numeric(runs)
   wpv5<-numeric(runs)
   wpv10<-numeric(runs)
   wpv20<-numeric(runs)
   wpv50<-numeric(runs)
-
+  
+  # and for glm
+  gpv1<-numeric(runs)
+  gpv5<-numeric(runs)
+  gpv10<-numeric(runs)
+  gpv20<-numeric(runs)
+  gpv50<-numeric(runs)
+  
   #determine how many batches we can create at each size
   batches5<-min(maxSamples, nWorms/5)
   batches10<-min(maxSamples, nWorms/10)
   batches20<-min(maxSamples, nWorms/20)
   batches50<-min(maxSamples, nWorms/50)
   
-  #prange<-min(a,b)/10
   prange<-0.1
   
   j<-1
@@ -47,6 +54,7 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
                        batch=double(), 
                        replicate=double(), 
                        set=character(), 
+                       logCFU=double(),
                        stringsAsFactors = TRUE)
     while(i <= reps){
      temp5A<-numeric(batches5)
@@ -71,24 +79,24 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
        tempB<-rbeta(maxSamples, a2, b2)*maxCFU
     for(k in 1:batches5){
       temp1<-rbeta(5, a1, b1)*maxCFU
-      temp5A[k]<-mean(temp1)
+      temp5A[k]<-mean(temp1, na.rm=TRUE)
       temp2<-rbeta(5, a2, b2)*maxCFU
-      temp5B[k]<-mean(temp2)}
+      temp5B[k]<-mean(temp2, na.rm=TRUE)}
     for (k in 1:batches10){
       temp1<-rbeta(10, a1, b1)*maxCFU
-      temp10A[k]<-mean(temp1)
+      temp10A[k]<-mean(temp1, na.rm=TRUE)
       temp2<-rbeta(10, a2, b2)*maxCFU
-      temp10B[k]<-mean(temp2)}
+      temp10B[k]<-mean(temp2, na.rm=TRUE)}
     for (k in 1:batches20){
       temp1<-rbeta(20, a1, b1)*maxCFU
-      temp20A[k]<-mean(temp1)
+      temp20A[k]<-mean(temp1, na.rm=TRUE)
       temp2<-rbeta(20, a2, b2)*maxCFU
-      temp20B[k]<-mean(temp2)}
+      temp20B[k]<-mean(temp2, na.rm=TRUE)}
     for (k in 1:batches50){
       temp1<-rbeta(50, a1, b1)*maxCFU
-      temp50A[k]<-mean(temp1)
+      temp50A[k]<-mean(temp1, na.rm=TRUE)
       temp2<-rbeta(50, a2, b2)*maxCFU
-      temp50B[k]<-mean(temp2)}
+      temp50B[k]<-mean(temp2, na.rm=TRUE)}
     #commit statistics to data frame
     datacheck<-c(tempA, tempB, temp5A, temp5B, temp10A, temp10B, temp20A, temp20B, temp50A, temp50B)
     if(sum(is.na(datacheck))==0){
@@ -102,8 +110,14 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
                             rep("A", batches10), rep("B", batches10),
                             rep("A", batches20), rep("B", batches20),
                             rep("A", batches50), rep("B", batches50)
-                            )
-                    ))}
+                            ),
+                      logCFU=log10(datacheck)
+                    ))
+      mydata$logCFU[!is.finite(mydata$logCFU)]<-1
+      mydata$logCFU[mydata$logCFU<0]<-1
+      print(min(mydata$logCFU)) # debug
+    }
+    # concatenate temp objects for easy stats
     my1A<-c(my1A,tempA)
     my5A<-c(my5A,temp5A)
     my10A<-c(my10A,temp10A)
@@ -126,6 +140,7 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
       batch=c(1, 5, 10, 20, 50),
       run=j
     ))
+    #print(meanCFU) # debug
     
       #Mann-Whitney U tests
       wtest1<-wilcox.test(mydata$CFU[mydata$batch==1 & mydata$set=="A"],mydata$CFU[mydata$batch==1 & mydata$set=="B"])
@@ -140,12 +155,41 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
       wpv20[j]<-wtest20$p.value
       wpv50[j]<-wtest50$p.value
       
+      # and glm significance for setB
+      myglm.single<-mydata %>%
+        dplyr::filter(batch==1) %>%
+        glm(logCFU~replicate*set, family=Gamma, data=.)
+      gpv1[j]<-coef(summary(myglm.single))["setB",4]
+      
+      myglm.batch5<-mydata %>%
+        dplyr::filter(batch==5) %>%
+        glm(logCFU~replicate*set, family=Gamma, data=.)
+      gpv5[j]<-coef(summary(myglm.batch5))["setB",4]
+      
+      myglm.batch10<-mydata %>%
+        dplyr::filter(batch==10) %>%
+        glm(logCFU~replicate*set, family=Gamma, data=.)
+      gpv10[j]<-coef(summary(myglm.batch10))["setB",4]
+
+      myglm.batch20<-mydata %>%
+        dplyr::filter(batch==20) %>%
+        glm(logCFU~replicate*set, family=Gamma, data=.)
+      gpv20[j]<-coef(summary(myglm.batch20))["setB",4]
+
+      myglm.batch50<-mydata %>%
+        dplyr::filter(batch==50) %>%
+        glm(logCFU~replicate*set, family=Gamma, data=.)
+      gpv50[j]<-coef(summary(myglm.batch50))["setB",4]
+
       j<-j+1
   }
   w.pvals<-c(sum(wpv1<0.05)/runs, sum(wpv5<0.05)/runs, sum(wpv10<0.05)/runs, sum(wpv20<0.05)/runs, sum(wpv50<0.05)/runs)
   print(w.pvals)
-  mydata$logCFU<-log10(mydata$CFU)
-  mydata$logCFU[!is.finite(mydata$logCFU)]<-0
+  glm.pvals<-c(sum(gpv1<0.05)/runs, sum(gpv5<0.05)/runs, sum(gpv10<0.05)/runs, sum(gpv20<0.05)/runs, sum(gpv50<0.05)/runs)
+  print(glm.pvals)
+  
+  #mydata$logCFU<-log10(mydata$CFU)
+  #mydata$logCFU[!is.finite(mydata$logCFU)]<-0
   
   if(returnMEANS){return(meanCFU)}
   else {return(mydata)}
