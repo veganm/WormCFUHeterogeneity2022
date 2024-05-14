@@ -801,8 +801,10 @@ tempF.summary %>%
   geom_jitter(width=1)+
   scale_y_log10()
 
-# Plot the average CFU within each experiment X set
+# Plot the average CFU within each experiment and set
 tempF.summary %>%
   ggplot(aes(x=batch, y=meanCFU, color=factor(Distribution)))+
   geom_jitter(width=1)+
   scale_y_log10()
+
+# expand. Simulate data from named distributions for comparison
