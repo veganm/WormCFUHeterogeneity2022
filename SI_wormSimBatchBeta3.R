@@ -1,4 +1,4 @@
-wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, sameParams=FALSE, returnMEANS=TRUE){
+wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, prange=0.1, sameParams=FALSE, returnMEANS=TRUE){
   #Function that generates beta-distributed "worm CFU counts" with triplicate days
   #a and b are the parameters of the beta distribution
   #maxCFU is the scaling factor used to turn beta values to CFUs
@@ -6,7 +6,11 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
   #maxSamples is the maximum number of "digests" that we will perform, until nWorms limit is reached
   #reps is the number of independent replicates to be performed in each "experiment"
   #runs is the number of times to run the simulation
-  #can return meanCFU or one run of data
+  #prange is the width of the uniform noise on beta parameters
+  # If sameparams=FALSE (default), two data sets A and B will be instantiated
+  # with different parameter draws
+  # Otherwise, A and B have the same parameters within a replicate
+  #The function can return meanCFU or one run of data, as indicated by returnMeans
   meanCFU<-tibble(meanA=double(), 
                       meanB=double(),
                       varA=double(),
@@ -34,8 +38,6 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, same
   batches10<-min(maxSamples, nWorms/10)
   batches20<-min(maxSamples, nWorms/20)
   batches50<-min(maxSamples, nWorms/50)
-  
-  prange<-0.1
   
   j<-1
   while (j <= runs){
