@@ -40,7 +40,7 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
   #               Default (Batch==1) for individual (unbatched) measurements.
   # alpha_start and beta_start: initialization for beta distribution fits
   # correction_constant: multiplier to correct the fraction of a sample used for one measurement
-  #   (e.g. for CFU data, measurements from 10 uL spots need a correction of (1000/10)=100 for an original volume of 1 mL)
+  #   (e.g. for CFU data, measurements from 10 uL spots with an original volume of 1 mL need a correction of (1000/10)=100)
   # n_countable: upper bound for "countable" number of events (threshold of "too many to count")
   #   (for use in simulating sampling noise)
   # Returns a tibble where observed mean values are stored for each "sample"
@@ -51,10 +51,9 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
   #  The data must have columns:
   #   - Count (num): raw counts (e.g. number of colonies counted for CFU data)
   # The data may have columns:
-  #   - D (num):  Serial dilution factor. A value of 0 (default) is undiluted; 1 indicates the first N-fold dilution; etc.
+  #   - D (num):  Serial dilution factor. A value of 0 (default) is undiluted; 1 indicates the first foldD-fold dilution; etc.
   #               If this column is not present, the code uses the raw counts * correction_constant for all calculations.
-  #               If this column is present, the code will check for a column named "CFU" and calculate it if missing.
-  #   - FoldD(num): Fold dilution in dilution series. default is 10X dilutions.
+  #   - FoldD(num): Fold dilution in dilution series. Default is 10X dilutions (e.g. each step in serial dilution is 1:10 volume).
   #   - FinalCount (num): Corrected counts. ***Will be calculated from raw counts if absent.***
   
     
@@ -164,7 +163,7 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
                                         "Normal Sampling",
                                         "Lognormal Sampling",
                                         "Beta Sampling"),
-                            sample_size=batch_sizes[i],
+                            Batch=batch_sizes[i],
                             FinalCount=c(
                                     round(mean(sim_normal, na.rm=TRUE)),
                                     round(mean(sim_lnorm, na.rm=TRUE)),
@@ -179,7 +178,7 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
     }
   
   # Rearrange the finished data from temp into a proper tibble
-  # with columns dist_name, sample_size, and FinalCount
+  # with columns dist_name, Batch, and FinalCount
   distribution_means<-dplyr::bind_rows(temp)
   return(distribution_means)
 }
