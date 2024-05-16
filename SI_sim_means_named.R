@@ -69,7 +69,7 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
   my_names<-names(input_data) 
   if(length(which(my_names=="FinalCount"))>0){
     if(length(which(my_names=="D"))!=0){ # if we are given a dilution factor
-      input_data$FinalCount<-(correction_constant *(Count*10^D))/Batch
+      input_data$FinalCount<-(correction_constant *(Count*foldD^D))/Batch
     } else {
       input_data$FinalCount<-(correction_constant * Count)/Batch
     }
