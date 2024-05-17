@@ -746,6 +746,11 @@ wormSimF.1.5.summary %>%
   geom_point()+
   scale_y_log10()
 
+wormSimF.1.5.summary %>%
+  ggplot(aes(x=batch, y=meanCFU))+
+  geom_point()+
+  scale_y_log10()
+
 wormSimF.5.5.summary<-wormSimF.5.5 %>%
   group_by(set, batch, run) %>%
   summarize(meanCFU=mean(CFU, na.rm=TRUE),
@@ -761,6 +766,83 @@ wormSimF.5.5.summary %>%
   geom_point()+
   scale_y_log10()
 
+#~~~~~~~~~~~~~~~~~~~~~~~
+# some ANOVAs
+wormSimF.1.5.aov10<-wormSimF.1.5 %>%
+  dplyr::filter(batch==10)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.aov10)
+hist(wormSimF.1.5.aov10$residuals) # quick check - design is even, so should be ok
+
+wormSimF.1.5.aov20<-wormSimF.1.5 %>%
+  dplyr::filter(batch==20)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.aov20)
+hist(wormSimF.1.5.aov20$residuals) # quick check - design is even, so should be ok
+
+wormSimF.1.5.aov50<-wormSimF.1.5 %>%
+  dplyr::filter(batch==50)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.aov50)
+hist(wormSimF.1.5.aov50$residuals) # quick check - design is even, so should be ok
+
+###  again with a different number of runs to check the biological variances
+wormSimF.1.5.12runs<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, runs=12, maxCFU=100000)
+glimpse(wormSimF.1.5.12runs)
+wormSimF.1.5.12runs$run<-as.factor(wormSimF.1.5.12runs$run)
+wormSimF.1.5 %>%
+  ggplot(aes(x=factor(batch), y=logCFU, color=run)) + 
+  geom_violin(fill=NA) + 
+  geom_point(shape=16, position=position_jitterdodge(0.2)) +
+  ylim(1,5) + theme_classic() + 
+  scale_color_viridis_d(option="mako", end=0.8)+
+  theme(text=element_text(size=14), 
+        #axis.title.x = element_blank(), 
+        plot.title=element_text(hjust=0.5),
+  ) + 
+  facet_wrap(~set)+
+  labs(title="Simulated data, Beta(1,5)", 
+       x="Batch size",
+       y=expression(log[10](Bacteria)),
+       color="Replicate")
+
+# and more ANOVAs
+wormSimF.1.5.12runs.aov10<-wormSimF.1.5.12runs %>%
+  dplyr::filter(batch==10)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.12runs.aov10)
+hist(wormSimF.1.5.12runs.aov10$residuals) # quick check - design is even, so should be ok
+
+wormSimF.1.5.12runs.aov20<-wormSimF.1.5.12runs %>%
+  dplyr::filter(batch==20)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.12runs.aov20)
+hist(wormSimF.1.5.12runs.aov20$residuals) # quick check - design is even, so should be ok
+
+wormSimF.1.5.12runs.aov50<-wormSimF.1.5.12runs %>%
+  dplyr::filter(batch==50)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.12runs.aov50)
+hist(wormSimF.1.5.12runs.aov50$residuals) # quick check - design is even, so should be ok
+
+###  again with a different number of runs to check the biological variances
+wormSimF.1.5.8runs<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, runs=8, maxCFU=100000)
+glimpse(wormSimF.1.5.8runs)
+wormSimF.1.5.8runs$run<-as.factor(wormSimF.1.5.8runs$run)
+
+wormSimF.1.5.8runs.aov10<-wormSimF.1.5.8runs %>%
+  dplyr::filter(batch==10)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.8runs.aov10)
+hist(wormSimF.1.5.8runs.aov10$residuals) # quick check - design is even, so should be ok
+
+wormSimF.1.5.8runs.aov20<-wormSimF.1.5.8runs %>%
+  dplyr::filter(batch==20)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.8runs.aov20)
+
+#~~~~~~~~~~~~~~~~~~~~~~~
+# plot together
 wormSimF.5.5.summary$Distribution<-"Beta(5,5)"
 wormSimF.1.5.summary$Distribution<-"Beta(1,5)"
 wormSimF.summary<-rbind(wormSimF.1.5.summary, wormSimF.5.5.summary)
@@ -808,3 +890,49 @@ tempF.summary %>%
   scale_y_log10()
 
 # expand. Simulate data from named distributions for comparison
+# let's take the SA single-worm data set (three runs with D0 plated)
+
+SaCount<- SaSeCount %>%
+  dplyr::filter(Condition=="SA")
+
+SaCount6<-SaCount %>%
+  dplyr::filter(Run==6)
+
+# simulate data from stats of individual worm real data
+SaCount6_distributions<-sim_means_named(input_data=SaCount6, n_reps=12, n_runs=12, correction_constant = 20)
+
+# Diagnostic plots
+SaCount6_distributions %>%
+  ggplot(aes(x=factor(Batch), y=logFinalCount, color=factor(Run)))+
+  geom_jitter(width=0.1)+
+  facet_wrap(~dist_name)
+
+SaCount6_distributions_summary<-SaCount6_distributions %>%
+  group_by(dist_name, Batch, Run) %>%
+  summarize(meanTotal=mean(FinalCount, na.rm=TRUE),
+            sdTotal=sd(FinalCount, na.rm=TRUE),
+            n=n()
+  )
+
+SaCount6_distributions_summary<-SaCount6_distributions_summary %>%
+  mutate(cvTotal=sdTotal/meanTotal)
+view(SaCount6_distributions_summary)
+
+SaCount6_distributions_summary %>%
+  ggplot(aes(x=factor(Batch), y=cvTotal, color=factor(dist_name)))+
+  #geom_jitter(width=1)+
+  geom_boxplot()+
+  scale_color_viridis_d(option="turbo")
+
+SaCount6_distributions_summary %>%
+  ggplot(aes(x=factor(Batch), y=meanTotal, color=factor(dist_name)))+
+  geom_jitter(width=0.1)+
+  scale_y_log10()+
+  scale_color_viridis_d()+
+  facet_wrap(~dist_name)
+
+SaCount6_distributions_summary %>%
+  ggplot(aes(x=factor(Batch), y=meanTotal, color=factor(dist_name)))+
+  geom_boxplot()+
+  scale_y_log10()+
+  scale_color_viridis_d(option="turbo")
