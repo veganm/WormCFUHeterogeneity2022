@@ -30,19 +30,24 @@ sim_sample_noise<-function(raw_data, foldD=10, correction_constant=1, n_countabl
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, alpha_start=1, beta_start=2, correction_constant=1, n_countable=50){
+sim_means_named<-function(input_data, n_reps, n_runs, batch_sizes=c(1,5,10,20,50), 
+                          Batch=1, foldD=10, alpha_start=1, beta_start=2, 
+                          correction_constant=1, n_countable=50, prange=0.2){
   # A function to generate simulated distributions of means based on raw data
-  # using the normal, lognormal, and Beta distributions (latter is non-unique) 
+  # using the normal, lognormal, and Beta distributions 
   # Data generated are average values for simulated "samples"
-  # n_reps: number of values to generate at each batch size
+  # 
+  # n_reps: number of values to generate at each batch size within an experimental "run"
   # batch_sizes: vector of batch sizes for simulations (number of individuals per batch)
-  # Batch (num): Number of individuals/units in the batch for each measurement in input_data 
+  # Batch (num): Number of individuals or units in the batch for each measurement in input_data 
   #               Default (Batch==1) for individual (unbatched) measurements.
   # alpha_start and beta_start: initialization for beta distribution fits
   # correction_constant: multiplier to correct the fraction of a sample used for one measurement
-  #   (e.g. for CFU data, measurements from 10 uL spots with an original volume of 1 mL need a correction of (1000/10)=100)
+  #     (e.g. for CFU data, measurements from 10 uL spots with an original volume of 1 mL need a correction of (1000/10)=100)
   # n_countable: upper bound for "countable" number of events (threshold of "too many to count")
-  #   (for use in simulating sampling noise)
+  #     (for use in simulating sampling noise)
+  # prange: Sets width of parametric heterogeneity for the beta
+
   # Returns a tibble where observed mean values are stored for each "sample"
 
   # input_data should be a tibble where each row is one data point, 
@@ -61,16 +66,16 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
   pacman::p_load(MASS, tidyverse) 
 
     # Create an empty temporary vector of defined size to hold the data
-  temp<-vector("list", length=length(batch_sizes)*n_reps)
+  temp<-vector("list", length=length(batch_sizes)*n_reps*n_runs)
   
   # Do we need to correct counts for dilution?
   # Divide by batch size (may be 1) to get per-unit or per-individual numbers
   my_names<-names(input_data) 
-  if(length(which(my_names=="FinalCount"))>0){
+  if(length(which(my_names=="FinalCount"))==0){  # if FinalCount does not exist
     if(length(which(my_names=="D"))!=0){ # if we are given a dilution factor
-      input_data$FinalCount<-(correction_constant *(Count*foldD^D))/Batch
+      input_data$FinalCount<-(correction_constant *(input_data$Count*foldD^input_data$D))/Batch
     } else {
-      input_data$FinalCount<-(correction_constant * Count)/Batch
+      input_data$FinalCount<-(correction_constant * input_data$Count)/Batch
     }
   } 
   # now we should have final counts
@@ -83,8 +88,8 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
   shared_mean<-mean(mydata, na.rm=TRUE)
   shared_var<-var(mydata, na.rm=TRUE)
   shared_sd<-sqrt(shared_var)
-  shared_mean_log<-mean(log(mydata+1), na.rm=TRUE)
-  shared_var_log<-var(log(mydata+1), na.rm=TRUE)
+  shared_mean_log<-log((shared_mean^2)/(sqrt((shared_mean^2)+shared_var)))
+  shared_var_log<-log(1+(shared_var/(shared_mean^2)))
   shared_sd_log<-sqrt(shared_var_log)
   
   ####  Begin parameter generation
@@ -132,54 +137,77 @@ sim_means_named<-function(input_data, n_reps, batch_sizes, Batch=1, foldD=10, al
     # Establish an index which will be used to store data
     idx<-1
     
-    # Iterate over each of the values in the vector of batch sizes
-    for (i in 1:length(batch_sizes)){
-      #print(i) # for debugging
-      # Within each sample size, execute the indicated number of replicates
-      for (j in 1:n_reps){
+    for(k in seq_len(n_runs)){  
+      # Execute the indicated number of experimental "runs"
+      # Parameter heterogeneity between runs for heterogeneous beta simulations
+      a1<-a*(1+runif(1, min=-prange, max=prange))
+      b1<-b*(1+runif(1, min=-prange, max=prange))
+      
+      for (j in seq_len(n_reps)){
+        # Execute the indicated number of replicates within each run
         #print(j) # for debugging
-        # Within each replicate, create a tibble with the mean from each sample
-        # and staple it into the temporary vector
+        # Iterate over each of the values in the vector of batch sizes
+        for (i in seq_along(batch_sizes)){
+          #print(i) # for debugging
+          # Within each replicate, create a tibble with the mean from each sample
+          # and staple it into the temporary vector
         
-        # first generate the raw data without heterogeneity
-        sim_normal<-round(rnorm(batch_sizes[i], mean=shared_mean, sd=shared_sd))
-        sim_zeros<-which(sim_normal<0)
-        sim_normal[sim_zeros]<-0
-        sim_lnorm<-round(rlnorm(batch_sizes[i], meanlog=shared_mean_log, sdlog=shared_sd_log))
-        sim_beta<-rbeta(batch_sizes[i], shape1 = a, shape2 = b)
-        # de-normalize the beta
-        sim_beta<-round((sim_beta * (max(mydata)-min(mydata))) + min(mydata))
-        
-        # then add sampling noise
-        # (function defined above in this script)
-        sim_normal_noise<-sim_sample_noise(round(sum(sim_normal)), 
+          # generate data from draws
+          sim_normal<-round(rnorm(batch_sizes[i], mean=shared_mean, sd=shared_sd))
+          sim_zeros<-which(sim_normal<0)
+          sim_normal[sim_zeros]<-0
+          sim_lnorm<-round(rlnorm(batch_sizes[i], meanlog=shared_mean_log, sdlog=shared_sd_log))
+          sim_beta<-rbeta(batch_sizes[i], shape1 = a, shape2 = b)
+          sim_beta_het<-rbeta(batch_sizes[i], shape1 = a1, shape2 = b1) # Beta with run-to-run heterogeneity
+          sim_beta_indiv<-rep(0, batch_sizes[i]) # Beta with *individual* heterogeneity
+          for(w in seq_len(batch_sizes[i])){ 
+            a1<-a*(1+runif(1, min=-prange, max=prange)) # resample parameters for each individual
+            b1<-b*(1+runif(1, min=-prange, max=prange))
+            sim_beta_indiv[w]<-rbeta(1, shape1 = a1, shape2 = b1)
+          }
+          
+          # de-normalize the betas
+          sim_beta<-round((sim_beta * (max(mydata)-min(mydata))) + min(mydata))
+          sim_beta_het<-round((sim_beta_het * (max(mydata)-min(mydata))) + min(mydata))
+          sim_beta_indiv<-round((sim_beta_indiv * (max(mydata)-min(mydata))) + min(mydata))
+          
+          # then add sampling noise
+          # (function defined above in this script)
+          sim_normal_noise<-sim_sample_noise(round(sum(sim_normal)), 
+                                             foldD=foldD, correction_constant = correction_constant, n_countable = n_countable)/batch_sizes[i]
+          sim_lnormal_noise<-sim_sample_noise(round(sum(sim_lnorm)), 
+                                              foldD=foldD, correction_constant = correction_constant, n_countable = n_countable)/batch_sizes[i]
+          sim_beta_noise<-sim_sample_noise(round(sum(sim_beta)), 
                                            foldD=foldD, correction_constant = correction_constant, n_countable = n_countable)/batch_sizes[i]
-        sim_lnormal_noise<-sim_sample_noise(round(sum(sim_lnorm)), 
-                                            foldD=foldD, correction_constant = correction_constant, n_countable = n_countable)/batch_sizes[i]
-        sim_beta_noise<-sim_sample_noise(round(sum(sim_beta)), 
-                                         foldD=foldD, correction_constant = correction_constant, n_countable = n_countable)/batch_sizes[i]
-        
-        temp[[idx]]<-tibble(dist_name=c("Normal", "Lognormal", "Beta",
-                                        "Normal Sampling",
-                                        "Lognormal Sampling",
-                                        "Beta Sampling"),
-                            Batch=batch_sizes[i],
-                            FinalCount=c(
-                                    round(mean(sim_normal, na.rm=TRUE)),
-                                    round(mean(sim_lnorm, na.rm=TRUE)),
-                                    round(mean(sim_beta, na.rm=TRUE)),
-                                    sim_normal_noise,
-                                    sim_lnormal_noise,
-                                    sim_beta_noise
-                            )
-                            ) # close assignment to temp[[]]
-        idx<-idx+1
-      }
-    }
+          
+          temp[[idx]]<-tibble(dist_name=c("Normal", "Lognormal", "Beta",
+                                          "Normal Sampling",
+                                          "Lognormal Sampling",
+                                          "Beta Sampling",
+                                          "Beta Het", "Beta IHet"),
+                              Batch=batch_sizes[i],
+                              Run=k,
+                              Rep=j,
+                              FinalCount=c(
+                                      round(mean(sim_normal, na.rm=TRUE)),
+                                      round(mean(sim_lnorm, na.rm=TRUE)),
+                                      round(mean(sim_beta, na.rm=TRUE)),
+                                      sim_normal_noise,
+                                      sim_lnormal_noise,
+                                      sim_beta_noise,
+                                      round(mean(sim_beta_het, na.rm=TRUE)),
+                                      round(mean(sim_beta_indiv, na.rm=TRUE))
+                              )
+                              ) # close assignment to temp[[]]
+          idx<-idx+1
+          } # close batch size
+      } # close replicate within run
+    } # close run
   
   # Rearrange the finished data from temp into a proper tibble
-  # with columns dist_name, Batch, and FinalCount
+  # with columns dist_name, Batch, Rep, FinalCount, and logFinalCount
   distribution_means<-dplyr::bind_rows(temp)
+  distribution_means$logFinalCount<-log10(distribution_means$FinalCount+1)
   return(distribution_means)
 }
 
