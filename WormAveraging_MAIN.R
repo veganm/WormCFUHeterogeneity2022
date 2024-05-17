@@ -18,21 +18,22 @@ xTextSize<-14
 # FUNCTIONS
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-wormbootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, correction_constant=1){
+bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, correction_constant=20){
   # Expects a number of replicates for the bootstrap (n_reps)
-  # and a data frame of worm CFU data for individuals (mydata)
+  # and a data frame where each row represents one individual (mydata)
   # where the number of colonies counted is in column "Count"
   # the dilution at which these colonies were measured is in column "D",
+  #   e.g. D=0 for undiluted sample, D=1 for the first FoldD-fold dilution, etc
   # FoldD(num) is fold dilution in dilution series 
   #  (Default is 10X dilutions, e.g. each step in serial dilution is 1:10 volume)
   #
   ## The dilution correction factor (numeric) is given as "correction_constant"
-  # and is the ratio of the original volume and the volume plated
+  # and is the ratio of the original volume and the volume plated/measured
   # e.g. for 10 uL spots and an original volume of 1 mL, correction_constant = 100
   # 
   # Returns a data frame of simulated batch digests
-  # with batch sizes in vector batch_sizes, default (1, 5, 10, 20, 50) worms/batch
-  # values reported as inferred CFU/worm and log10(CFU/worm)
+  # with batch sizes in vector batch_sizes, default (1, 5, 10, 20, 50) individuals/batch
+  # values reported as inferred CFU/individual and log10(CFU/individual)
   
   # get size of data
   capp<-dim(mydata)[1]
@@ -50,15 +51,15 @@ wormbootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10
     #idx20<-sample(1:capp,20,replace=TRUE)
     #idx50<-sample(1:capp,50,replace=TRUE)
     
-    temp<-rep(0, length(batch_sizes))
-    for (j in seq_len(batch_sizes)){
+    batch_data<-rep(0, length(batch_sizes))
+    for (j in seq_along(batch_sizes)){
+      #print(j)  # Debugging
       # Randomly pull samples from data for batching
       idx<-sample(1:capp,batch_sizes[j],replace=TRUE)
       # Assume Poisson count error and generate new counts
       temp_count<-rpois(batch_sizes[j], mydata$Count[idx])
       # Calculate CFU/worm
-      temp_final<-correction_constant*temp_count*foldD^mydata$D[idx]
-      temp[j]<-mean(temp_final)
+      batch_data[j]<-mean(correction_constant*temp_count*foldD^mydata$D[idx], na.rm=TRUE)
     }
     #temp_count<-rpois(5, mydata$Count[idx5])
     #temp<-correction_constant*temp_count*10^mydata$D[idx5]
@@ -77,7 +78,7 @@ wormbootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10
     #batch50[i]<-mean(temp)
     
     temp[[i]]<-tibble(Batch=batch_sizes,
-                      FinalCount=temp) 
+                      FinalCount=batch_data) 
   }
   
   # unfold data
@@ -127,12 +128,15 @@ pBatchSA
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Now Salmonella enterica LT2-GFP single worms (fed on plates)
-# and data for S. aureus-GFP
+# and S. aureus-GFP
 
 SaSeCount<-read_xlsx("SaSeCount.xlsx")  
 
+# Note that runs 1-3 of S. aureus have a different TOD
+# with dilutions 1-3 plated; 
+# runs 4-6 start at dilution 0
 SaSeCount %>%
-  ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+  ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   ylim(-0.1,6)+ theme_classic() + 
@@ -145,7 +149,7 @@ SaSeCount %>%
 
 # summary statistics
 SaSeCount %>%
-  group_by(Condition, Rep) %>%
+  group_by(Condition, Run) %>%
   summarise(count=n(),
             medianCFU=median(CFU, na.rm=TRUE),
             meanCFU=mean(CFU, na.rm=TRUE),
@@ -162,7 +166,7 @@ SaSeCount2$Count[SaSeCount2$Count==0]<-NA
 SaSeCount2<-SaSeCount2[complete.cases(SaSeCount2),]
 
 SaSeCount2 %>%
-	ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+	ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
 	geom_violin(fill=NA) + 
 	ylim(-0.1,6)+ theme_classic() + 
@@ -176,7 +180,7 @@ SaSeCount2 %>%
 	
 # summary statistics
 SaSeCount2 %>%
-  group_by(Condition, Rep) %>%
+  group_by(Condition, Run) %>%
   summarise(count=n(),
             medianCFU=median(CFU, na.rm=TRUE),
             meanCFU=mean(CFU, na.rm=TRUE),
@@ -192,13 +196,13 @@ SaSeCount2 %>%
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #        GENERATE BOOTSTRAPPED DATA FROM S. ENTERICA COLONIZATION
 #
-# here we will call the wormboot function (wormbootOnCounts)
+# here we will call the function bootOnCounts(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, correction_constant=20)
 # to generate simulated data and make comparisons
 
 temp1<-SaSeCount %>%
-  dplyr::filter(Condition=="SE" & Rep=="1")
+  dplyr::filter(Condition=="SE" & Run=="1")
 temp2<-SaSeCount %>%
-  dplyr::filter(Condition=="SE" & Rep=="2")
+  dplyr::filter(Condition=="SE" & Run=="2")
 
 # summary statistics
 mean(temp1$CFU)
@@ -206,14 +210,14 @@ median(temp1$CFU)
 mean(temp2$CFU)
 median(temp2$CFU)
 
-SeBoot1<-wormbootOnCounts(dim(temp1)[1], temp1, 20)
-SeBoot2<-wormbootOnCounts(dim(temp2)[1], temp2, 20)
-SeBoot1$Rep<-as.factor("Rep1")
-SeBoot2$Rep<-as.factor("Rep2")
+SeBoot1<-bootOnCounts(n_reps=dim(temp1)[1], mydata=temp1)
+SeBoot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2)
+SeBoot1$Run<-as.factor("Run1")
+SeBoot2$Run<-as.factor("Run2")
 jointSeBoot<-rbind(SeBoot1, SeBoot2)
 
 pJointSEBoot<-jointSeBoot %>%
-	ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+	ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
 	geom_violin(fill=NA) + 
   geom_hline(yintercept=log10(20), color="black", lty="dashed")+
@@ -233,7 +237,7 @@ pJointSEBoot<-jointSeBoot %>%
 	  )+
   facet_wrap(vars(Batch), ncol=5)+
   labs(title=expression(paste(italic("S. enterica"), " Simulated Batch Digests")), 
-       y=expression(log[10](CFU/Worm)), x="Replicate")+
+       y=expression(log[10](CFU/Worm)), x="Run")+
   stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot
@@ -257,7 +261,7 @@ shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==5])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==10])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==20])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==50])
-rm(SeBoot1, SeBoot2, temp1, temp2)
+#rm(SeBoot1, SeBoot2, temp1, temp2)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
@@ -268,19 +272,19 @@ temp$CFU[idx]<-20
 temp$logCFU[idx]<-log10[20]
 
 temp1A<-temp %>%
-  dplyr::filter(Rep=="1")
+  dplyr::filter(Run=="1")
 temp2A<-temp %>%
-  dplyr::filter(Rep=="2")
+  dplyr::filter(Run=="2")
 
-SeBoot1A<-wormbootOnCounts(dim(temp1A)[1], temp1A, 20)
-SeBoot2A<-wormbootOnCounts(dim(temp2A)[1], temp2A, 20)
-SeBoot1A$Rep<-as.factor("Rep1")
-SeBoot2A$Rep<-as.factor("Rep2")
+SeBoot1A<-bootOnCounts(n_reps=dim(temp1A)[1], mydata=temp1A)
+SeBoot2A<-bootOnCounts(n_reps=dim(temp2A)[1], mydata=temp2A)
+SeBoot1A$Run<-as.factor("Run1")
+SeBoot2A$Run<-as.factor("Run2")
 jointSeBoot_nozeros<-rbind(SeBoot1A, SeBoot2A)
 
 pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
   dplyr::filter(Batch<20) %>% # sufficient to make the point
-  ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+  ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   ylim(-0.1,6.2) + 
@@ -298,12 +302,12 @@ pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
     legend.text = element_text(size=xTextSize-1)
   )+
   facet_wrap(vars(Batch), ncol=5)+
-  labs(title="Zeros removed", x="Replicate", y=expression(log[10](CFU/Worm)))+
+  labs(title="Zeros removed", x="Run", y=expression(log[10](CFU/Worm)))+
   stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot_nozeros
 
-rm(SeBoot1A, SeBoot2A, temp1A, temp2A)
+#rm(SeBoot1A, SeBoot2A, temp1A, temp2A)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # and with extra zeros
@@ -317,19 +321,19 @@ temp$CFU[idx]<-0
 temp$logCFU[idx]<-0
 
 temp1B<-temp %>%
-  dplyr::filter(Rep=="1")
+  dplyr::filter(Run=="1")
 temp2B<-temp %>%
-  dplyr::filter(Rep=="2")
+  dplyr::filter(Run=="2")
 
-SeBoot1B<-wormbootOnCounts(dim(temp1B)[1], temp1B, 20)
-SeBoot2B<-wormbootOnCounts(dim(temp2B)[1], temp2B, 20)
-SeBoot1B$Rep<-as.factor("Rep1")
-SeBoot2B$Rep<-as.factor("Rep2")
+SeBoot1B<-bootOnCounts(n_reps=dim(temp1B)[1], mydata=temp1B)
+SeBoot2B<-bootOnCounts(n_reps=dim(temp2B)[1], mydata=temp2B)
+SeBoot1B$Run<-as.factor("Run1")
+SeBoot2B$Run<-as.factor("Run2")
 jointSeBoot_zeros3<-rbind(SeBoot1B, SeBoot2B)
 
 pJointSEBoot_zeros3<-jointSeBoot_zeros3 %>%
   dplyr::filter(Batch<20) %>% # sufficient to make the point
-  ggplot(aes(x=factor(Rep), y=logCFU, color=factor(Rep))) + 
+  ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   geom_hline(yintercept=3, color="black", lty="dashed")+
@@ -348,12 +352,12 @@ pJointSEBoot_zeros3<-jointSeBoot_zeros3 %>%
     legend.text = element_text(size=xTextSize-1)
   )+
   facet_wrap(vars(Batch), ncol=5)+
-  labs(title="Zero-enriched", x="Replicate", y=expression(log[10](CFU/Worm)))+
+  labs(title="Zero-enriched", x="Run", y=expression(log[10](CFU/Worm)))+
   stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot_zeros3
 
-rm(SeBoot1B, SeBoot2B, temp1B, temp2B, temp)
+#rm(SeBoot1B, SeBoot2B, temp1B, temp2B, temp)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -471,7 +475,10 @@ glimpse(AllCounts)
 AllCounts$Rep<-as.factor(AllCounts$Rep)
 
 # Incorporate the pathogen colonization data: prep for rbind
-SaSeCount2_subset<- subset(SaSeCount2, select=c("Condition", "Rep", "CFU", "logCFU")) 
+
+SaSeCount2_subset<- SaSeCount2 %>%
+  subset(select=c("Condition", "Run", "CFU", "logCFU")) %>%
+  dplyr::rename(Rep=Run)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Merge all the single-worm CFU data
@@ -734,13 +741,13 @@ mean(temp1A$CFU)
 sd(temp1A$CFU)/mean(temp1A$CFU)
 skewness(temp1A$CFU)
 
-# here we will call the wormboot function (wormbootOnCounts)
+# here we will call the boot function (bootOnCounts)
 # to generate simulated data and make comparisons
 # 22 data points to match the smallest data set (N2)
 # batch 50 is pretty large for these data so we'll stop at 20
 
-tempBoot1A<-wormbootOnCounts(22, temp1A, 2)
-tempBoot2A<-wormbootOnCounts(22, temp2A, 2)
+tempBoot1A<-bootOnCounts(n_reps=22, mydata=temp1A, correction_constant=2)
+tempBoot2A<-bootOnCounts(n_reps=22, mydata=temp2A, correction_constant=2)
 tempBoot1A$Host<-as.factor("dbl1")
 tempBoot2A$Host<-as.factor("N2")
 jointTempBootA<-rbind(tempBoot1A, tempBoot2A)
@@ -799,8 +806,8 @@ sd(temp2$CFU)/mean(temp2$CFU)
 skewness(temp2$CFU)
 
 # Boostrap data
-tempBoot1B<-wormbootOnCounts(24, temp1, 2)
-tempBoot2B<-wormbootOnCounts(24, temp2, 20)
+tempBoot1B<-bootOnCounts(n_reps=24, mydata=temp1, correction_constant=2)
+tempBoot2B<-bootOnCounts(n_reps=24, mydata=temp2, correction_constant=20)
 tempBoot1B$Condition<-as.factor("Multi")
 tempBoot2B$Condition<-as.factor("SE")
 jointTempBootB<-rbind(tempBoot1B, tempBoot2B)
@@ -848,8 +855,8 @@ wpv20<-numeric(reps)
 wpv50<-numeric(reps)
 
 for (j in 1:reps){
-  tempBoot1<-WormbootOnCounts(22, temp1A, 2)
-  tempBoot2<-wormbootOnCounts(22, temp2A, 2)
+  tempBoot1<-bootOnCounts(n_reps=22, mydata=temp1A, correction_constant=2)
+  tempBoot2<-bootOnCounts(n_reps=22, mydata=temp2A, correction_constant=2)
   wtest5<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==5], tempBoot2$CFU[tempBoot2$Batch==5])
   wtest10<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==10], tempBoot2$CFU[tempBoot2$Batch==10])
   wtest20<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==20], tempBoot2$CFU[tempBoot2$Batch==20])
@@ -872,8 +879,8 @@ wpv20<-numeric(reps)
 wpv50<-numeric(reps)
 
 for (j in 1:reps){
-  tempBoot1<-wormbootOnCounts(24, temp1, 2)
-  tempBoot2<-wormbootOnCounts(24, temp2, 20)
+  tempBoot1<-bootOnCounts(n_reps=24, mydata=temp1, correction_constant=2)
+  tempBoot2<-bootOnCounts(n_reps=24, mydata=temp2, correction_constant=20)
   wtest5<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==5], tempBoot2$CFU[tempBoot2$Batch==5])
   wtest10<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==10], tempBoot2$CFU[tempBoot2$Batch==10])
   wtest20<-wilcox.test(tempBoot1$CFU[tempBoot1$Batch==20], tempBoot2$CFU[tempBoot2$Batch==20])
