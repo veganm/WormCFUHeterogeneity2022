@@ -1,4 +1,4 @@
-wormSimBatchBetaFactorial<-function(a, b, maxCFU, runs = 4, reps=10, sameParams=FALSE){
+wormSimBatchBetaFactorial<-function(a, b, maxCFU, runs = 4, reps=10, prange=0.1, sameParams=FALSE){
   #Function that generates two sets (A and B) of beta-distributed "worm CFU counts" with factorial design
   # Simplified version of wormSimBatchBeta3() without embedded tests
   # and with a constant number of measurements per experiment at all batch sizes
@@ -7,7 +7,8 @@ wormSimBatchBetaFactorial<-function(a, b, maxCFU, runs = 4, reps=10, sameParams=
   #reps is the number of measurements to be performed in each "experiment" (default 10); 
   #  all batch sizes have the same number of replicate measurements 
   #runs is the number of independent "experiments" (default 4)
-  #When sameParams=FALSE, Beta parameters are given different noise in data sets A and B
+  # prange is the uniform range of parameter noise
+  #When sameParams=FALSE, Beta parameters are re-drawn in data sets A and B
   #Returns a simulated biologically-averaged data set for analysis
   
   # make places to put the data
@@ -16,9 +17,6 @@ wormSimBatchBetaFactorial<-function(a, b, maxCFU, runs = 4, reps=10, sameParams=
                      run=double(), 
                      set=character(), 
                      stringsAsFactors = TRUE)
-  
-  # as usual, the range of parameter noise
-  prange<-0.1
   
   j<-1 # set index on runs
   while (j <= runs){
