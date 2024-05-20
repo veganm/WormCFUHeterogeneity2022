@@ -18,7 +18,7 @@ xTextSize<-14
 # FUNCTIONS
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, correction_constant=20){
+bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), FoldD=10, correction_constant=20){
   # Expects a number of replicates for the bootstrap (n_reps)
   # and a data frame where each row represents one individual (mydata)
   # where the number of colonies counted is in column "Count"
@@ -49,7 +49,7 @@ bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, co
       # Assume Poisson count error and generate new counts
       temp_count<-rpois(batch_sizes[j], mydata$Count[idx])
       # Calculate CFU/worm
-      batch_data[j]<-mean(correction_constant*temp_count*foldD^mydata$D[idx], na.rm=TRUE)
+      batch_data[j]<-mean(correction_constant*temp_count*FoldD^mydata$D[idx], na.rm=TRUE)
     }
     temp[[i]]<-tibble(Batch=batch_sizes,
                       FinalCount=batch_data) 
@@ -111,7 +111,7 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   my_names<-names(input_data) 
   if(length(which(my_names=="FinalCount"))==0){  # if FinalCount does not exist
     if(length(which(my_names=="D"))!=0){ # if we are given a dilution factor
-      input_data$FinalCount<-(correction_constant *(input_data$Count*foldD^input_data$D))/Batch
+      input_data$FinalCount<-(correction_constant *(input_data$Count*FoldD^input_data$D))/Batch
     } else if(length(which(my_names=="D"))==0){
       stop("Either fold dilution D or FinalCount must be a column in input_data!")
     }
@@ -149,9 +149,9 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
             
             # Bootstrap both sets
             Boot1<-bootOnCounts(n_reps=dim(temp1)[1], mydata=temp1, 
-                                batch_sizes=batch_sizes, foldD=foldD, correction_constant = correction_constant)
+                                batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
             Boot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2, 
-                                batch_sizes=batch_sizes, foldD=foldD, correction_constant = correction_constant)
+                                batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
             
             # fix any zeros thrown by resample
             if (sum(is.infinite(Boot1$logCFU))>0){Boot1$logCFU[is.infinite(Boot1$logCFU)]<-0}
@@ -213,8 +213,8 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
           temp_count_1<-rpois(n1, temp1$Count[idx1])
           temp_count_2<-rpois(n2, temp2$Count[idx2])
           # Calculate biologically averaged total counts for resampled data
-          Boot1s<-(correction_constant*temp_count_1*foldD^temp1$D[idx1])/temp1$Batch
-          Boot2s<-(correction_constant*temp_count_2*foldD^temp2$D[idx2])/temp2$Batch
+          Boot1s<-(correction_constant*temp_count_1*FoldD^temp1$D[idx1])/temp1$Batch
+          Boot2s<-(correction_constant*temp_count_2*FoldD^temp2$D[idx2])/temp2$Batch
           
           Boot.t<-t.test(log10(Boot1s), log10(Boot2s))
           Boot.w<-wilcox.test(Boot1s, Boot2s)
@@ -345,11 +345,11 @@ SaSeCount2 %>%
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #        GENERATE BOOTSTRAPPED DATA FROM S. ENTERICA COLONIZATION
 #
-# here we will call the function bootOnCounts(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, correction_constant=20)
+# here we will call the function bootOnCounts(n_reps, mydata, batch_sizes=c(1,5,10,20,50), FoldD=10, correction_constant=20)
 # to generate simulated data and make comparisons
 
 temp1<-SaSeCount %>%
-  dplyr::filter(Condition=="SE" & Run=="1")
+  dplyr::filter(Condition=="SE" & Run=="3")
 temp2<-SaSeCount %>%
   dplyr::filter(Condition=="SE" & Run=="2")
 
@@ -364,7 +364,7 @@ SeBoot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2)
 if (sum(is.infinite(SeBoot1$logCFU))>0){SeBoot1$logCFU[is.infinite(SeBoot1$logCFU)]<-0}
 if (sum(is.infinite(SeBoot2$logCFU))>0){SeBoot2$logCFU[is.infinite(SeBoot2$logCFU)]<-0}
 
-SeBoot1$Run<-as.factor("Run1")
+SeBoot1$Run<-as.factor("Run3")
 SeBoot2$Run<-as.factor("Run2")
 jointSeBoot<-rbind(SeBoot1, SeBoot2)
 
@@ -404,7 +404,7 @@ t.test(SeBoot1$logCFU[SeBoot1$Batch==50], SeBoot2$logCFU[SeBoot2$Batch==50])
 # and tests for normality
 # Shapiro-Wilk
 shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==1])
-shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==5])
+shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==5]) #ns
 shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==10])
 shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==20])
 shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==50])
@@ -412,7 +412,7 @@ shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==1])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==5])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==10])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==20])
-shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==50])
+shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==50]) #ns
 #rm(SeBoot1, SeBoot2, temp1, temp2)
 
 #~~~~~~~~~~~
@@ -426,17 +426,25 @@ SeBootCombinations<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,1
                                                 FoldD=10, correction_constant=20)
 glimpse(SeBootCombinations)
 
+SeBootCombinations$Run1ID<-paste("Run", SeBootCombinations$Run1, sep=" ")
+SeBootCombinations$Run2ID<-paste("Run", SeBootCombinations$Run2, sep=" ")
+
 SeBootCombinations %>%
   ggplot(aes(x=factor(Batch), y=p_t, color=factor(Batch)))+
   geom_violin(fill=NA)+
   geom_jitter(width=0.05, alpha=0.1)+
-  facet_grid(vars(Run1), vars(Run2))
+  theme_bw()+
+  facet_grid(vars(Run1ID), vars(Run2ID))+
+  labs(x="Batch Size", y="t-test p-value", color="Batch")
 
 SeBootCombinations %>%
   ggplot(aes(x=factor(Batch), y=p_w, color=factor(Batch)))+
   geom_violin(fill=NA)+
   geom_jitter(width=0.05, alpha=0.1)+
-  facet_grid(vars(Run1), vars(Run2))
+  theme_bw()+
+  facet_grid(vars(Run1ID), vars(Run2ID))+
+  labs(x="Batch Size", y="Wilcoxon p-value", color="Batch")
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
