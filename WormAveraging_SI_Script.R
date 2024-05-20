@@ -1,6 +1,6 @@
 #                Code for Supplementary Information
 
-pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, readxl, patchwork, sBIC)
+pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, readxl, patchwork, sBIC)
 
 # Note that functions are in separate files
 # and that this code relies on data objects from the main text script (WormAveraging_MAIN.R)
@@ -767,81 +767,6 @@ wormSimF.5.5.summary %>%
   scale_y_log10()
 
 #~~~~~~~~~~~~~~~~~~~~~~~
-# some ANOVAs
-wormSimF.1.5.aov10<-wormSimF.1.5 %>%
-  dplyr::filter(batch==10)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.aov10)
-hist(wormSimF.1.5.aov10$residuals) # quick check - design is even, so should be ok
-
-wormSimF.1.5.aov20<-wormSimF.1.5 %>%
-  dplyr::filter(batch==20)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.aov20)
-hist(wormSimF.1.5.aov20$residuals) # quick check - design is even, so should be ok
-
-wormSimF.1.5.aov50<-wormSimF.1.5 %>%
-  dplyr::filter(batch==50)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.aov50)
-hist(wormSimF.1.5.aov50$residuals) # quick check - design is even, so should be ok
-
-###  again with a different number of runs to check the biological variances
-wormSimF.1.5.12runs<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, runs=12, maxCFU=100000)
-glimpse(wormSimF.1.5.12runs)
-wormSimF.1.5.12runs$run<-as.factor(wormSimF.1.5.12runs$run)
-wormSimF.1.5 %>%
-  ggplot(aes(x=factor(batch), y=logCFU, color=run)) + 
-  geom_violin(fill=NA) + 
-  geom_point(shape=16, position=position_jitterdodge(0.2)) +
-  ylim(1,5) + theme_classic() + 
-  scale_color_viridis_d(option="mako", end=0.8)+
-  theme(text=element_text(size=14), 
-        #axis.title.x = element_blank(), 
-        plot.title=element_text(hjust=0.5),
-  ) + 
-  facet_wrap(~set)+
-  labs(title="Simulated data, Beta(1,5)", 
-       x="Batch size",
-       y=expression(log[10](Bacteria)),
-       color="Replicate")
-
-# and more ANOVAs
-wormSimF.1.5.12runs.aov10<-wormSimF.1.5.12runs %>%
-  dplyr::filter(batch==10)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.12runs.aov10)
-hist(wormSimF.1.5.12runs.aov10$residuals) # quick check - design is even, so should be ok
-
-wormSimF.1.5.12runs.aov20<-wormSimF.1.5.12runs %>%
-  dplyr::filter(batch==20)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.12runs.aov20)
-hist(wormSimF.1.5.12runs.aov20$residuals) # quick check - design is even, so should be ok
-
-wormSimF.1.5.12runs.aov50<-wormSimF.1.5.12runs %>%
-  dplyr::filter(batch==50)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.12runs.aov50)
-hist(wormSimF.1.5.12runs.aov50$residuals) # quick check - design is even, so should be ok
-
-###  again with a different number of runs to check the biological variances
-wormSimF.1.5.8runs<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, runs=8, maxCFU=100000)
-glimpse(wormSimF.1.5.8runs)
-wormSimF.1.5.8runs$run<-as.factor(wormSimF.1.5.8runs$run)
-
-wormSimF.1.5.8runs.aov10<-wormSimF.1.5.8runs %>%
-  dplyr::filter(batch==10)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.8runs.aov10)
-hist(wormSimF.1.5.8runs.aov10$residuals) # quick check - design is even, so should be ok
-
-wormSimF.1.5.8runs.aov20<-wormSimF.1.5.8runs %>%
-  dplyr::filter(batch==20)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.8runs.aov20)
-
-#~~~~~~~~~~~~~~~~~~~~~~~
 # plot together
 wormSimF.5.5.summary$Distribution<-"Beta(5,5)"
 wormSimF.1.5.summary$Distribution<-"Beta(1,5)"
@@ -889,7 +814,357 @@ tempF.summary %>%
   geom_jitter(width=1)+
   scale_y_log10()
 
-# expand. Simulate data from named distributions for comparison
+#~~~~~~~~~~~~~~~~~~~~~~~
+# some ANOVAs
+wormSimF.1.5.aov10<-wormSimF.1.5 %>%
+  dplyr::filter(batch==10)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.aov10)
+hist(wormSimF.1.5.aov10$residuals) # quick check - design is even, so should be ok
+
+wormSimF.1.5.aov20<-wormSimF.1.5 %>%
+  dplyr::filter(batch==20)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.aov20)
+hist(wormSimF.1.5.aov20$residuals) # quick check - design is even, so should be ok
+
+wormSimF.1.5.aov50<-wormSimF.1.5 %>%
+  dplyr::filter(batch==50)%>%
+  aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.aov50)
+hist(wormSimF.1.5.aov50$residuals) # quick check - design is even, so should be ok
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+###  again with a different number of runs to check the biological variances
+# SQUARE DESIGN
+wormSimF.1.5.12square<-wormSimBatchBetaFactorial(a=1, b=5, reps=12, runs=12, maxCFU=100000)
+wormSimF.1.5.12square$run<-as.factor(wormSimF.1.5.12square$run)
+wormSimF.1.5.12square.aov10<-wormSimF.1.5.12square %>% dplyr::filter(batch==10) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.12square.aov50<-wormSimF.1.5.12square %>% dplyr::filter(batch==50) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.12square.aov5<-wormSimF.1.5.12square %>% dplyr::filter(batch==5) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.12square.aov20<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.12square.aov1<-wormSimF.1.5.12square %>% dplyr::filter(batch==1) %>% aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.12square.aov1)
+summary(wormSimF.1.5.12square.aov5)
+summary(wormSimF.1.5.12square.aov10)
+summary(wormSimF.1.5.12square.aov20)
+summary(wormSimF.1.5.12square.aov50)
+
+wormSimF.1.5.12square.aov1.summary<-summary(wormSimF.1.5.12square.aov1)
+wormSimF.1.5.12square.aov1.summary[[1]]
+wormSimF.1.5.12square.aov1.summary[[1]][,2] # SSEs
+wormSimF.1.5.12square.aov1.summary[[1]][,5] # P-vals
+
+# interesting. MSEs are very similar in batched
+# see if this holds
+# variability is higher
+wormSimF.1.5.5square<-wormSimBatchBetaFactorial(a=1, b=5, reps=5, runs=5, maxCFU=100000)
+wormSimF.1.5.5square$run<-as.factor(wormSimF.1.5.5square$run)
+wormSimF.1.5.5square.aov10<-wormSimF.1.5.5square %>% dplyr::filter(batch==10) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.5square.aov50<-wormSimF.1.5.5square %>% dplyr::filter(batch==50) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.5square.aov5<-wormSimF.1.5.5square %>% dplyr::filter(batch==5) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.5square.aov20<-wormSimF.1.5.5square %>% dplyr::filter(batch==20) %>% aov(logCFU~run+set, data=.)
+wormSimF.1.5.5square.aov1<-wormSimF.1.5.5square %>% dplyr::filter(batch==1) %>% aov(logCFU~run+set, data=.)
+summary(wormSimF.1.5.5square.aov1)
+summary(wormSimF.1.5.5square.aov5)
+summary(wormSimF.1.5.5square.aov10)
+summary(wormSimF.1.5.5square.aov20)
+summary(wormSimF.1.5.5square.aov50)
+
+#~~~~~~~~~~~~~~~~~~~~~
+# First, non-square designs
+
+factor_dim<-c(3, 5, 8, 10, 12, 15, 20) # squares
+batch_sizes<-c(1, 5, 10, 20, 50)
+iter<-25 # number of times to iterate the simulation
+
+# Create an empty temporary vector of defined size to hold the data
+temp<-vector("list", length=length(batch_sizes)*length(factor_dim)* iter)
+
+idx<-1
+for (k in seq_len(iter)){
+  for (i in seq_along(factor_dim)){ # loop along dimension of square factorial design
+    for (m in seq_along(factor_dim)){ # again
+      # this code allows n_reps and n_runs to differ
+      temp.beta<-wormSimBatchBetaFactorial(a=1, b=5, reps=factor_dim[i], runs=factor_dim[m], maxCFU=100000)
+      temp.beta$run<-as.factor(temp.beta$run)
+      for (j in seq_along(batch_sizes)){ # loop over batch sizes
+        temp.beta.aov<-temp.beta %>% dplyr::filter(batch==batch_sizes[j]) %>% aov(logCFU~run+set, data=.)
+        temp.beta.aov.summary<-summary(temp.beta.aov)
+        tempA<- temp.beta %>% dplyr::filter(batch==batch_sizes[j] & set=="A")
+        tempB<- temp.beta %>% dplyr::filter(batch==batch_sizes[j] & set=="B")
+        wtest<-wilcox.test(tempA$CFU, tempB$CFU)
+        temp[[idx]]<-tibble(
+          Iteration=k,
+          n_reps=factor_dim[i],
+          n_runs=factor_dim[m],
+          batch=batch_sizes[j],
+          Component=c("Run", "Set"),
+          MSE=temp.beta.aov.summary[[1]][1:2,3],
+          p_aov=temp.beta.aov.summary[[1]][1:2,5],
+          p_w=wtest$p.value
+        )
+        idx<-idx+1
+      } # close wrap over batch sizes
+    } # again
+  } # close wrap over factorial dimension
+} # close wrap over iterations
+
+# plot out
+wormSimF.1.5.RunRep.summary<-dplyr::bind_rows(temp)
+
+wormSimF.1.5.RunRep.summary_wide <- wormSimF.1.5.RunRep.summary %>%
+  #dplyr::filter(batch>1)%>%
+  pivot_wider(names_from=Component, values_from = c(MSE, p_aov))
+wormSimF.1.5.RunRep.summary_wide %>%
+  ggplot(aes(x=MSE_Run, y=MSE_Set))+
+  geom_point(aes(color=factor(batch)))+
+  #scale_x_log10()+
+  #scale_y_log10()+
+  stat_poly_line(formula=y~x+0)+
+  stat_poly_eq(use_label("eq"), formula = y ~ x + 0)
+
+wormSimF.1.5.RunRep.summary_wide<-wormSimF.1.5.RunRep.summary_wide%>%
+  mutate(MSE_ratio=MSE_Set/MSE_Run)
+
+wormSimF.1.5.RunRep.summary_wide %>%
+  ggplot(aes(y=MSE_ratio, x=factor(n_reps), color=factor(batch)))+
+  geom_boxplot()+
+  scale_y_log10()+
+  geom_hline(yintercept = 1)+
+  facet_grid(~n_runs)
+
+# p values?
+wormSimF.1.5.RunRep.summary %>%
+  dplyr::filter(Component=="Set") %>%
+  ggplot(aes(x=factor(batch), y=p_aov, color=factor(n_reps)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  scale_y_log10()+
+  facet_grid(~n_runs)
+
+wormSimF.1.5.RunRep.summary %>%
+  dplyr::filter(Component=="Set") %>%
+  ggplot(aes(x=factor(batch), y=p_w, color=factor(n_reps)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  scale_y_log10()+
+  facet_grid(~n_runs)
+
+
+##############
+# now the squares
+# loop it
+factor_dim<-c(3, 5, 8, 10, 12, 15, 20) # squares
+batch_sizes<-c(1, 5, 10, 20, 50)
+iter<-25 # number of times to iterate the simulation
+
+# Create an empty temporary vector of defined size to hold the data
+temp<-vector("list", length=length(batch_sizes)*length(factor_dim)* iter)
+
+idx<-1
+for (k in seq_len(iter)){
+  for (i in seq_along(factor_dim)){ # loop along dimension of square factorial design
+    temp.square<-wormSimBatchBetaFactorial(a=1, b=5, reps=factor_dim[i], runs=factor_dim[i], maxCFU=100000)
+    temp.square$run<-as.factor(temp.square$run)
+    for (j in seq_along(batch_sizes)){ # loop over batch sizes
+      temp.square.aov<-temp.square %>% dplyr::filter(batch==batch_sizes[j]) %>% aov(logCFU~run+set, data=.)
+      temp.square.aov.summary<-summary(temp.square.aov)
+      tempA<- temp.square %>% dplyr::filter(batch==batch_sizes[j] & set=="A")
+      tempB<- temp.square %>% dplyr::filter(batch==batch_sizes[j] & set=="B")
+      wtest<-wilcox.test(tempA$CFU, tempB$CFU)
+      temp[[idx]]<-tibble(
+        Iteration=k,
+        n_reps=factor_dim[i],
+        n_runs=factor_dim[i],
+        batch=batch_sizes[j],
+        Component=c("Run", "Set"),
+        MSE=temp.square.aov.summary[[1]][1:2,3],
+        p_aov=temp.square.aov.summary[[1]][1:2,5],
+        p_w=wtest$p.value
+      )
+      idx<-idx+1
+    } # close wrap over batch sizes
+  } # close wrap over factorial dimension
+} # close wrap over iterations
+
+# plot out
+wormSimF.1.5.square.summary<-dplyr::bind_rows(temp)
+glimpse(wormSimF.1.5.square.summary)
+
+wormSimF.1.5.square.summary_wide <- wormSimF.1.5.square.summary %>%
+  #dplyr::filter(batch>1)%>%
+  pivot_wider(names_from=Component, values_from = c(MSE, p_aov))
+wormSimF.1.5.square.summary_wide %>%
+  ggplot(aes(x=MSE_Run, y=MSE_Set))+
+  geom_point(aes(size=n_reps, color=factor(batch)))+
+  scale_x_log10()+
+  scale_y_log10()+
+  stat_poly_line(formula=y~x+0)+
+  stat_poly_eq(use_label("eq"), formula = y ~ x + 0)
+
+wormSimF.1.5.square.summary_wide<-wormSimF.1.5.square.summary_wide%>%
+  mutate(MSE_ratio=MSE_Set/MSE_Run)
+
+wormSimF.1.5.square.summary_wide %>%
+  ggplot(aes(y=MSE_ratio, x=factor(n_reps), color=factor(batch)))+
+  geom_boxplot()+
+  scale_y_log10()+
+  geom_hline(yintercept = 1)
+
+# p values?
+wormSimF.1.5.square.summary %>%
+  dplyr::filter(Component=="Set") %>%
+  ggplot(aes(x=factor(batch), y=p_aov, color=factor(n_reps)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  scale_y_log10()
+
+wormSimF.1.5.square.summary %>%
+  dplyr::filter(Component=="Set") %>%
+  ggplot(aes(x=factor(batch), y=p_w, color=factor(n_reps)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  scale_y_log10()
+
+#~~~~~~~~~~~~
+# Now results from ANOVA of Beta(1,5) simulated data 
+# vs data from Beta(2,5)
+
+# Create an empty temporary vector of defined size to hold the data
+temp<-vector("list", length=length(batch_sizes)*length(factor_dim)* iter)
+
+idx<-1
+for (k in seq_len(iter)){
+  for (i in seq_along(factor_dim)){ # loop along dimension of square factorial design
+    temp.square.A<-wormSimBatchBetaFactorial(a=1, b=5, reps=factor_dim[i], runs=factor_dim[i], maxCFU=100000)
+    temp.square.B<-wormSimBatchBetaFactorial(a=2, b=5, reps=factor_dim[i], runs=factor_dim[i], maxCFU=100000)
+    temp.square.A <- temp.square.A %>%
+      dplyr::filter(set=="A")
+    temp.square.B <- temp.square.B %>%
+      dplyr::filter(set=="B")
+    temp.square<-rbind(temp.square.A, temp.square.B)
+    temp.square$run<-as.factor(temp.square$run)
+    for (j in seq_along(batch_sizes)){ # loop over batch sizes
+      temp.square.aov<-temp.square %>% dplyr::filter(batch==batch_sizes[j]) %>% aov(logCFU~run+set, data=.)
+      temp.square.aov.summary<-summary(temp.square.aov)
+      temp.square.A1 <- temp.square.A %>%
+        dplyr::filter(batch==batch_sizes[j])
+      temp.square.B1 <- temp.square.B %>%
+        dplyr::filter(batch==batch_sizes[j])
+      wtest<-wilcox.test(temp.square.A1$CFU, temp.square.B1$CFU)
+      temp[[idx]]<-tibble(
+        Iteration=k,
+        n_reps=factor_dim[i],
+        n_runs=factor_dim[i],
+        batch=batch_sizes[j],
+        Component=c("Run", "Set"),
+        MSE=temp.square.aov.summary[[1]][1:2,3],
+        p_aov=temp.square.aov.summary[[1]][1:2,5],
+        p_w=wtest$p.value
+      )
+      idx<-idx+1
+    } # close wrap over batch sizes
+  } # close wrap over factorial dimension
+} # close wrap over iterations
+
+# plot out
+wormSimF.TwoBeta.square.summary<-dplyr::bind_rows(temp)
+
+# p values
+wormSimF.TwoBeta.square.summary %>%
+  dplyr::filter(Component=="Set") %>%
+  ggplot(aes(x=factor(batch), y=p_aov, color=factor(n_reps)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  scale_y_log10()
+
+wormSimF.TwoBeta.square.summary %>%
+  dplyr::filter(Component=="Set") %>%
+  ggplot(aes(x=factor(batch), y=p_w, color=factor(n_reps)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  scale_y_log10()
+
+# MSE
+wormSimF.TwoBeta.square.summary_wide <- wormSimF.TwoBeta.square.summary %>%
+  #dplyr::filter(batch>1)%>%
+  pivot_wider(names_from=Component, values_from = c(MSE, p_aov))
+wormSimF.TwoBeta.square.summary_wide<-wormSimF.TwoBeta.square.summary_wide%>%
+  mutate(MSE_ratio=MSE_Set/MSE_Run)
+glimpse(wormSimF.TwoBeta.square.summary_wide)
+
+wormSimF.TwoBeta.square.summary_wide %>%
+  ggplot(aes(y=MSE_ratio, x=factor(n_reps), color=factor(batch)))+
+  geom_boxplot()+
+  scale_y_log10()+
+  geom_hline(yintercept = 1)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# combine simulated data sets
+wormSimF.1.5.RunRep.summary$Condition<-"Beta(1,5)"
+wormSimF.1.5.square.summary$Condition<-"Beta(1,5) Square"
+wormSimF.TwoBeta.square.summary$Condition<-"B(1,5) vs B(2,5)"
+
+wormSimF.Beta.Factorial<-rbind(wormSimF.1.5.RunRep.summary,
+                               wormSimF.1.5.square.summary,
+                               wormSimF.TwoBeta.square.summary)
+glimpse(wormSimF.Beta.Factorial)
+
+wormSimF.1.5.RunRep.summary_wide$Condition<-"Beta(1,5)"
+wormSimF.1.5.square.summary_wide$Condition<-"Beta(1,5) Square"
+wormSimF.TwoBeta.square.summary_wide$Condition<-"B(1,5) vs B(2,5)"
+
+wormSimF.Beta.Factorial_wide<-rbind(wormSimF.1.5.RunRep.summary_wide,
+                                    wormSimF.1.5.square.summary_wide,
+                                    wormSimF.TwoBeta.square.summary_wide)
+glimpse(wormSimF.Beta.Factorial_wide)
+
+# Generate summary table for p values for set to set comparisons
+wormSimF.Beta.Factorial.pvals<-wormSimF.Beta.Factorial %>%
+  dplyr::filter(Component=="Run") %>%
+  mutate(isSig_aov = as.integer(p_aov<=0.05),
+         isSig_w=as.integer(p_w<=0.05)) %>%
+  group_by(Condition, n_reps, n_runs, batch) %>%
+  summarize(psig_aov=sum(isSig_aov),
+            psig_w=sum(isSig_w),
+            n=n()
+            )
+wormSimF.Beta.Factorial.pvals <- wormSimF.Beta.Factorial.pvals %>%
+  mutate(fsig_aov=psig_aov/n,
+         fsig_w=psig_w/n)
+view(wormSimF.Beta.Factorial.pvals)
+
+# Fraction of significant p-values for run in ANOVA
+wormSimF.Beta.Factorial.pvals %>%
+  ggplot(aes(x=factor(batch), y=fsig_aov, color=factor(Condition)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  labs(x="Batch Size", y="Fraction Significant, Run", title="ANOVA",
+       color="")
+
+# Fraction of significant p-values for run in Wilcoxon
+wormSimF.Beta.Factorial.pvals %>%
+  ggplot(aes(x=factor(batch), y=fsig_w, color=factor(Condition)))+
+  geom_boxplot()+
+  geom_hline(yintercept = 0.05)+
+  labs(x="Batch Size", y="Fraction Significant, Run", title="Wilcoxon",
+       color="")
+
+# MSE ratio
+wormSimF.Beta.Factorial_wide %>%
+  ggplot(aes(y=MSE_ratio, x=factor(batch), color=factor(n_reps)))+
+  geom_boxplot()+
+  scale_y_log10()+
+  geom_hline(yintercept = 1)+
+  facet_wrap(~Condition)+
+  labs(x="Batch Size", y=expression(MSE[Run]*"/"*MSE[Replicate]), title="MSE Ratio",
+       color="Replicates")
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Simulate data from named distributions for comparison
 # let's take the SA single-worm data set (three runs with D0 plated)
 
 SaCount<- SaSeCount %>%
