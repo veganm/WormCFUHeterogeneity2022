@@ -41,19 +41,9 @@ bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, co
   # make someplace to put stuff
   temp<-vector("list", length=length(batch_sizes)*n_reps)
   
-  #batch5<-rep(0,n_reps)
-  #batch10<-rep(0,n_reps)
-  #batch20<-rep(0,n_reps)
-  #batch50<-rep(0, n_reps)
-  for(i in 1:n_reps){
-    #idx5<-sample(1:capp,5,replace=TRUE)
-    #idx10<-sample(1:capp,10,replace=TRUE)
-    #idx20<-sample(1:capp,20,replace=TRUE)
-    #idx50<-sample(1:capp,50,replace=TRUE)
-    
+  for(i in seq_len(n_reps)){
     batch_data<-rep(0, length(batch_sizes))
     for (j in seq_along(batch_sizes)){
-      #print(j)  # Debugging
       # Randomly pull samples from data for batching
       idx<-sample(1:capp,batch_sizes[j],replace=TRUE)
       # Assume Poisson count error and generate new counts
@@ -61,22 +51,6 @@ bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, co
       # Calculate CFU/worm
       batch_data[j]<-mean(correction_constant*temp_count*foldD^mydata$D[idx], na.rm=TRUE)
     }
-    #temp_count<-rpois(5, mydata$Count[idx5])
-    #temp<-correction_constant*temp_count*10^mydata$D[idx5]
-    #batch5[i]<-mean(temp)
-    
-    #temp_count<-rpois(10, mydata$Count[idx10])
-    #temp<-correction_constant*temp_count*10^mydata$D[idx10]
-    #batch10[i]<-mean(temp)
-    
-    #temp_count<-rpois(20, mydata$Count[idx20])
-    #temp<-correction_constant*temp_count*10^mydata$D[idx20]
-    #batch20[i]<-mean(temp)
-    
-    #temp_count<-rpois(50, mydata$Count[idx50])
-    #temp<-correction_constant*temp_count*10^mydata$D[idx50]
-    #batch50[i]<-mean(temp)
-    
     temp[[i]]<-tibble(Batch=batch_sizes,
                       FinalCount=batch_data) 
   }
@@ -87,15 +61,190 @@ bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), foldD=10, co
   dataSet<-dataSet %>%
     mutate(logCFU=log10(FinalCount))
   
-  #batch5log<-log10(batch5+1)
-  #batch10log<-log10(batch10+1)
-  #batch20log<-log10(batch20+1) 
-  #batch50log<-log10(batch50+1) 
-  #Batch<-c(rep(1,times=capp), rep(5, times=n_reps), rep(10, times=n_reps), rep(20, times=n_reps), rep(50, times=n_reps))
-  #mylogCFU<-log10(mydata$CFU+1)
-  #logCFU<-c(mylogCFU, batch5log, batch10log, batch20log, batch50log)
-  #CFU<-c(mydata$CFU, batch5, batch10, batch20, batch50)
-  #dataSet<-data.frame(Batch, CFU, logCFU)
+  return(dataSet)
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
+                            FoldD=10, correction_constant=20){
+  # Function that performs many iterations of bootstrapping on counts
+  # Assumes all data sets (indicated by unique values of Run) are independent replicates of one experiment
+  # If this is true, results will indicate run-to-run variation and estimated false-positive rates
+  # Calls bootOnCounts() for basic functionality.
+  # 
+  # IF A DATA SET OF INDIVIDUAL-BASED DATA IS PROVIDED
+  #   - The data set must contain at least two runs of data, ideally with 10+ data points in each
+  #   - Function assumes no subsampling (each individual is essentially a unit-1 subsample)
+  #   - Generates resampled data plus Poisson noise for individual and batch-based measurements
+  #   - Returns data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at each batch size
+  #
+  # IF A DATA SET OF BATCH-BASED DATA IS PROVIDED
+  #   - The data set must contain at least two runs of data, ideally with 10+ data points in each
+  #   - Generates resampled data plus Poisson noise using the indicated weighting from input data
+  #   - Returns data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at each batch size
+  # 
+  # Takes a data set with columns
+  #   Run (num): Each unique index represents one data set
+  #   Count (num): Number of raw counts associated with each sample
+  #   Batch (int): batch size or weight of each sample.
+  #         Batch=1 is the minimum and indicates individual-based sampling.
+  #   D (num, optional): Fold dilution at which counts were taken
+  #         (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc)
+  #         ***IF D IS NOT GIVEN, FinalCount MUST ALREADY EXIST IN THE DATA SET***
+  #   FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling.
+  #         Will be calculated if not present.
+  # Each row of the data set represents one measurement.
+  # 
+  # Other inputs:
+  #   batch_sizes (int): If suppling individual measurements, a vector of batch sizes is needed for
+  #   FoldD (num): Fold dilution in dilution series. Default is 10X dilutions.
+  #   correction_constant (num): a multiplier to correct the fraction of a sample used for one measurement to the original volume
+  #        (e.g. counts from 10 uL spots and an initial volume of 1 mL require correction (1000/10)=100)
+  
+  # load the necessary
+  pacman::p_load(tidyverse)
+  
+  ## START
+  # Figure out what is in the data set
+  # Do we need to correct counts for dilution?
+  # Divide by batch size (may be 1) to get per-unit or per-individual numbers
+  my_names<-names(input_data) 
+  if(length(which(my_names=="FinalCount"))==0){  # if FinalCount does not exist
+    if(length(which(my_names=="D"))!=0){ # if we are given a dilution factor
+      input_data$FinalCount<-(correction_constant *(input_data$Count*foldD^input_data$D))/Batch
+    } else if(length(which(my_names=="D"))==0){
+      stop("Either fold dilution D or FinalCount must be a column in input_data!")
+    }
+      else{
+      input_data$FinalCount<-(correction_constant * input_data$Count)/Batch
+    }
+  } 
+  # now we should have final counts
+  
+  # Are data individual or batch-based?
+  isIndividual<-max(input_data$Batch == 1)
+  
+  # How many runs of data are in the input data set?
+  run_ids<-unique(input_data$Run)
+  n_runs<-length(run_ids)
+  if(n_runs<2){
+    stop("At least two runs of data are required for bootstrapping.")
+  }
+  
+  # initiate looping index
+  idx<-1
+  
+  if (isIndividual){  ## For individual-based data
+    # Someplace to put the data generated
+    temp<-vector("list", length=length(batch_sizes)*n_runs*n_runs*nboot)
+    
+    for (m in seq_len(nboot)){  
+      for (i in seq_len(n_runs)){
+        for (j in seq_len(n_runs)){ # For each pair of runs
+            # Obtain two sets of data from the input
+            temp1<-input_data %>%
+              dplyr::filter(Run==run_ids[i])
+            temp2<-input_data %>%
+              dplyr::filter(Run==run_ids[j])
+            
+            # Bootstrap both sets
+            Boot1<-bootOnCounts(n_reps=dim(temp1)[1], mydata=temp1, 
+                                batch_sizes=batch_sizes, foldD=foldD, correction_constant = correction_constant)
+            Boot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2, 
+                                batch_sizes=batch_sizes, foldD=foldD, correction_constant = correction_constant)
+            
+            # fix any zeros thrown by resample
+            if (sum(is.infinite(Boot1$logCFU))>0){Boot1$logCFU[is.infinite(Boot1$logCFU)]<-0}
+            if (sum(is.infinite(Boot2$logCFU))>0){Boot2$logCFU[is.infinite(Boot2$logCFU)]<-0}
+    
+            # generate stats and carry out tests
+            for (k in seq_along(batch_sizes)){
+              Boot1s<-Boot1 %>%
+                filter(Batch==batch_sizes[k])
+              Boot2s<-Boot2 %>%
+                filter(Batch==batch_sizes[k])
+              Boot.t<-t.test(Boot1s$logCFU, Boot2s$logCFU)
+              Boot.w<-wilcox.test(Boot1s$logCFU, Boot2s$logCFU)
+              sw1<-shapiro.test(Boot1s$logCFU)
+              sw2<-shapiro.test(Boot2s$logCFU)
+              
+              # store the results
+              temp[[idx]]<-tibble(
+                Boot=m,
+                Batch=batch_sizes[k],
+                Run1=i,
+                Run2=j,
+                meanCFU1=mean(Boot1s$FinalCount, na.rm=TRUE), 
+                meanCFU2=mean(Boot2s$FinalCount, na.rm=TRUE),
+                varCFU1=var(Boot1s$FinalCount, na.rm=TRUE), 
+                varCFU2=var(Boot2s$FinalCount, na.rm=TRUE),
+                cvCFU1=sd(Boot1s$FinalCount, na.rm=TRUE)/mean(Boot1s$FinalCount, na.rm=TRUE),
+                cvCFU2=sd(Boot2s$FinalCount, na.rm=TRUE)/mean(Boot2s$FinalCount, na.rm=TRUE),
+                p_sw1=sw1$p.value, 
+                p_sw2=sw2$p.value,
+                p_t=Boot.t$p.value,
+                p_w=Boot.w$p.value
+              )
+              idx<-idx+1
+              } # finish loop over batch sizes
+          }
+        } # finish loops over run pairs
+    } # finish loop over bootstraps
+  } else {# finish individual conditional
+    # Someplace to put the data generated
+    temp<-vector("list", length=n_runs*n_runs*nboot)
+    
+    # If we have batched data
+    # Can't extrapolate to other batch sizes, but we can generate summary stats for the batching in data
+    for (m in seq_len(nboot)){  
+      for (i in seq_len(n_runs)){
+        for (j in seq_len(n_runs)){ # For each pair of runs
+          # Obtain two sets of data from the input
+          temp1<-input_data %>%
+            dplyr::filter(Run==run_ids[i])
+          temp2<-input_data %>%
+            dplyr::filter(Run==run_ids[j])
+          n1<-dim(temp1)[1] # get sizes
+          n2<-dim(temp2)[1]
+          # Resamples with batch weights from data
+          idx1<-sample(1:n1,n1,replace=TRUE)
+          idx2<-sample(1:n2,n2,replace=TRUE)
+          # Assume Poisson count error and generate new counts
+          temp_count_1<-rpois(n1, temp1$Count[idx1])
+          temp_count_2<-rpois(n2, temp2$Count[idx2])
+          # Calculate biologically averaged total counts for resampled data
+          Boot1s<-(correction_constant*temp_count_1*foldD^temp1$D[idx1])/temp1$Batch
+          Boot2s<-(correction_constant*temp_count_2*foldD^temp2$D[idx2])/temp2$Batch
+          
+          Boot.t<-t.test(log10(Boot1s), log10(Boot2s))
+          Boot.w<-wilcox.test(Boot1s, Boot2s)
+          sw1<-shapiro.test(log10(Boot1s))
+          sw2<-shapiro.test(log10(Boot2s))
+          
+          # store the results
+          temp[[idx]]<-tibble(
+            Boot=m,
+            Run1=i,
+            Run2=j,
+            meanCFU1=mean(Boot1s, na.rm=TRUE), 
+            meanCFU2=mean(Boot2s, na.rm=TRUE),
+            varCFU1=var(Boot1s, na.rm=TRUE), 
+            varCFU2=var(Boot2s, na.rm=TRUE),
+            cvCFU1=sd(Boot1s, na.rm=TRUE)/mean(Boot1s, na.rm=TRUE),
+            cvCFU2=sd(Boot2s, na.rm=TRUE)/mean(Boot2s, na.rm=TRUE),
+            p_sw1=sw1$p.value, 
+            p_sw2=sw2$p.value,
+            p_t=Boot.t$p.value,
+            p_w=Boot.w$p.value
+          )
+          idx<-idx+1
+        }
+      } # finish loop over run pairs
+    } # finish loop over bootstraps
+  } # end else loop
+  
+  # unfold and return results
+  dataSet<-dplyr::bind_rows(temp)
   return(dataSet)
 }
 
@@ -212,6 +361,9 @@ median(temp2$CFU)
 
 SeBoot1<-bootOnCounts(n_reps=dim(temp1)[1], mydata=temp1)
 SeBoot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2)
+if (sum(is.infinite(SeBoot1$logCFU))>0){SeBoot1$logCFU[is.infinite(SeBoot1$logCFU)]<-0}
+if (sum(is.infinite(SeBoot2$logCFU))>0){SeBoot2$logCFU[is.infinite(SeBoot2$logCFU)]<-0}
+
 SeBoot1$Run<-as.factor("Run1")
 SeBoot2$Run<-as.factor("Run2")
 jointSeBoot<-rbind(SeBoot1, SeBoot2)
@@ -262,6 +414,23 @@ shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==10])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==20])
 shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==50])
 #rm(SeBoot1, SeBoot2, temp1, temp2)
+
+#~~~~~~~~~~~
+# bootstrap many times, over all three runs
+
+input_data<-SaSeCount %>%
+  dplyr::filter(Condition=="SE")
+input_data<-input_data %>%
+  rename(FinalCount=CFU)
+SeBootCombinations<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
+                                                FoldD=10, correction_constant=20)
+glimpse(SeBootCombinations)
+
+SeBootCombinations %>%
+  ggplot(aes(x=factor(Batch), y=p_t, color=factor(Batch)))+
+  geom_violin(fill=NA)+
+  geom_jitter(width=0.05, alpha=0.1)+
+  facet_grid(vars(Run1), vars(Run2))
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
