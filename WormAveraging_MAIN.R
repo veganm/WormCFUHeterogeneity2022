@@ -432,6 +432,12 @@ SeBootCombinations %>%
   geom_jitter(width=0.05, alpha=0.1)+
   facet_grid(vars(Run1), vars(Run2))
 
+SeBootCombinations %>%
+  ggplot(aes(x=factor(Batch), y=p_w, color=factor(Batch)))+
+  geom_violin(fill=NA)+
+  geom_jitter(width=0.05, alpha=0.1)+
+  facet_grid(vars(Run1), vars(Run2))
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
 temp<-dplyr::filter(SaSeCount, Condition=="SE")
