@@ -93,9 +93,40 @@ pSeBootCombinations_testsummary<-SeBootCombinations_testsummary %>%
     plot.title=element_text(hjust=0.5)
   )+
   labs(x="Batch Size", y="Fraction Significant", fill="Test",
-       title=expression(paste(italic("S. enterica"), " Bootstrap Pairwise Tests")))+
+       title="Pairwise Tests")+
   facet_wrap(~RunPair)
 pSeBootCombinations_testsummary
+
+# how do mean and variance change with batching?
+SeBootCombinations_stats1<-SeBootCombinations %>%
+  dplyr::select(Batch, Run1, meanCFU1, varCFU1) %>%
+  rename(Run=Run1, meanCFU=meanCFU1, varCFU=varCFU1)
+SeBootCombinations_stats2<-SeBootCombinations %>%
+  dplyr::select(Batch, Run2, meanCFU2, varCFU2) %>%
+  rename(Run=Run2, meanCFU=meanCFU2, varCFU=varCFU2)
+SeBootCombinations_stats<-rbind(SeBootCombinations_stats1, SeBootCombinations_stats2)
+rm(SeBootCombinations_stats1, SeBootCombinations_stats2)
+SeBootCombinations_stats <-SeBootCombinations_stats %>%
+  mutate(logMeanCFU=log10(meanCFU),
+         sdCFU=sqrt(varCFU)/meanCFU,
+         RunID=paste("Run", Run, sep=" ")
+         )
+# plot
+pSeBootCombinations_stats<-SeBootCombinations_stats %>%
+  ggplot(aes(x=factor(Batch), y=logMeanCFU, color=factor(Batch)))+
+  geom_boxplot()+
+  #geom_jitter(width=0.1, alpha=0.1)+
+  theme_bw()+
+  scale_color_viridis_d(option="magma", end=0.85)+
+  facet_wrap(~RunID)+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    legend.title = element_blank()
+  )+
+  labs(x="Batch Size", y=expression(log[10]("Mean CFU")), fill="Batch",
+       title=expression(paste(italic("S. enterica"), " Bootstrap Means")))
+pSeBootCombinations_stats
 
 ## how many bootstrap replicates are indistinguishable from Gaussian?
 SeBootCombinations_SWtest1<-SeBootCombinations %>%
@@ -122,7 +153,6 @@ pSeBootCombinations_SWtest_summary<-SeBootCombinations_SWtest_summary %>%
   ggplot(aes(x=factor(Batch), y=fracGaussian, fill=factor(Run)))+
   geom_col(position=position_dodge())+
   geom_hline(yintercept=0.05)+
-  #scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
   theme_bw()+
   scale_fill_viridis_d(end=0.9)+
   theme(
@@ -134,13 +164,263 @@ pSeBootCombinations_SWtest_summary<-SeBootCombinations_SWtest_summary %>%
 pSeBootCombinations_SWtest_summary
 
 # assemble
-(pSeBootCombinations_ttest + pSeBootCombinations_testsummary)/ 
-  (pSeBootCombinations_wilcoxon + pSeBootCombinations_SWtest_summary) +
-  plot_layout(widths=c(1.5,1), guides="collect") + plot_annotation(tag_levels = 'A')
+pFigS1AB<-(pSeBootCombinations_ttest/pSeBootCombinations_wilcoxon) +
+  plot_annotation(tag_levels = 'A')
+#pFigS1AB
+pFigS1CDE<-plot_grid(pSeBootCombinations_testsummary,
+                       pSeBootCombinations_stats ,
+                       pSeBootCombinations_SWtest_summary,
+                     ncol=1, labels=c('C', 'D', 'E'))
+#pFigS1CDE
+wrap_elements(pFigS1AB) | wrap_elements(pFigS1CDE)
 ggsave("FigS1_SeSingleWormBootStats.png", width=12, height=7, units="in", dpi=300)
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Same bootstrap with zeros removed
+temp0<-dplyr::filter(SaSeCount, Condition=="SE")
+idx<-which(temp0$Count==0)
+temp0[idx,] # quick look
+temp0$Count[idx]<-1
+temp0$FinalCount[idx]<-20
+temp0$CFUPerWorm[idx]<-20
+temp0$logCFU[idx]<-log10(20)
+SeBootCombinations0<-bootOnCountsStats(input_data=temp0, batch_sizes=c(1,5,10,20,50), nboot=1000, 
+                                      FoldD=10, correction_constant=20)
+glimpse(SeBootCombinations0)
 
+SeBootCombinations0$Run1ID<-paste("Run", SeBootCombinations0$Run1, sep=" ")
+SeBootCombinations0$Run2ID<-paste("Run", SeBootCombinations0$Run2, sep=" ")
 
+#~~~~~~~~~~~~~~~
+# how many comparisons are significant for each test?
+SeBootCombinations0<-SeBootCombinations0 %>%
+  mutate(isSig_t=as.integer(as.logical(p_t<0.05)),
+         isSig_w=as.integer(as.logical(p_w<0.05)),
+         RunPair=paste(Run1ID, "v", Run2ID, sep=" "))
+
+# plot fraction significant tests
+SeBootCombinations0_testsummary<-SeBootCombinations0 %>%
+  group_by(RunPair, Batch) %>%
+  summarize(countSigT=sum(isSig_t),
+            countSigW=sum(isSig_w),
+            n=n()) %>%
+  mutate(fracSigT=countSigT/n,
+         fracSigW=countSigW/n) %>%
+  ungroup() %>%
+  dplyr::select(RunPair, Batch, fracSigT, fracSigW) %>%
+  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+               names_prefix = "fracSig", values_to = "fracSig")
+
+# remove redundant pairs
+pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
+            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
+# plot
+pSeBootCombinations0_testsummary<-SeBootCombinations0_testsummary %>%
+  dplyr::filter(RunPair %in% pair_list) %>%
+  ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="No Zeros")+
+  facet_wrap(~RunPair)
+pSeBootCombinations0_testsummary
+
+# how do mean and variance change with batching?
+SeBootCombinations0_stats1<-SeBootCombinations0 %>%
+  dplyr::select(Batch, Run1, meanCFU1, varCFU1) %>%
+  rename(Run=Run1, meanCFU=meanCFU1, varCFU=varCFU1)
+SeBootCombinations0_stats2<-SeBootCombinations0 %>%
+  dplyr::select(Batch, Run2, meanCFU2, varCFU2) %>%
+  rename(Run=Run2, meanCFU=meanCFU2, varCFU=varCFU2)
+SeBootCombinations0_stats<-rbind(SeBootCombinations0_stats1, SeBootCombinations0_stats2)
+rm(SeBootCombinations0_stats1, SeBootCombinations0_stats2)
+SeBootCombinations0_stats <-SeBootCombinations0_stats %>%
+  mutate(logMeanCFU=log10(meanCFU),
+         sdCFU=sqrt(varCFU)/meanCFU,
+         RunID=paste("Run", Run, sep=" ")
+  )
+# plot
+pSeBootCombinations0_stats<-SeBootCombinations0_stats %>%
+  #ggplot(aes(x=factor(Batch), y=logMeanCFU, color=factor(Batch)))+
+  mutate(cvCFU=sdCFU/meanCFU) %>%
+  ggplot(aes(x=factor(Batch), y=sdCFU, color=factor(Batch)))+
+  geom_boxplot()+
+  theme_bw()+
+  scale_color_viridis_d(option="magma", end=0.85)+
+  facet_wrap(~RunID)+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    legend.title = element_blank()
+  )+
+  labs(x="Batch Size", y=expression(log[10]("Mean CFU")), fill="Batch",
+       title="Means, Zeros Removed")
+pSeBootCombinations0_stats
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Same bootstrap with zeros enriched
+# implemented as higher TOD, call it 10^3
+temp3<-dplyr::filter(SaSeCount, Condition=="SE")
+idx<-which(temp3$logCFU<3)
+temp3$Count[idx]<-0
+temp3$D[idx]<-0
+temp3$FinalCount[idx]<-0
+temp3$CFUPerWorm[idx]<-0
+temp3$logCFU[idx]<-0
+
+SeBootCombinations3<-bootOnCountsStats(input_data=temp3, batch_sizes=c(1,5,10,20,50), nboot=1000, 
+                                       FoldD=10, correction_constant=20)
+glimpse(SeBootCombinations3)
+
+SeBootCombinations3$Run1ID<-paste("Run", SeBootCombinations3$Run1, sep=" ")
+SeBootCombinations3$Run2ID<-paste("Run", SeBootCombinations3$Run2, sep=" ")
+
+#~~~~~~~~~~~~~~~
+# how many comparisons are significant for each test?
+SeBootCombinations3<-SeBootCombinations3 %>%
+  mutate(isSig_t=as.integer(as.logical(p_t<0.05)),
+         isSig_w=as.integer(as.logical(p_w<0.05)),
+         RunPair=paste(Run1ID, "v", Run2ID, sep=" "))
+
+# plot fraction significant tests
+SeBootCombinations3_testsummary<-SeBootCombinations3 %>%
+  group_by(RunPair, Batch) %>%
+  summarize(countSigT=sum(isSig_t),
+            countSigW=sum(isSig_w),
+            n=n()) %>%
+  mutate(fracSigT=countSigT/n,
+         fracSigW=countSigW/n) %>%
+  ungroup() %>%
+  dplyr::select(RunPair, Batch, fracSigT, fracSigW) %>%
+  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+               names_prefix = "fracSig", values_to = "fracSig")
+
+# remove redundant pairs
+pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
+            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
+# plot
+pSeBootCombinations3_testsummary<-SeBootCombinations3_testsummary %>%
+  dplyr::filter(RunPair %in% pair_list) %>%
+  ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Zero-Enriched")+
+  facet_wrap(~RunPair)
+pSeBootCombinations3_testsummary
+
+# how do mean and variance change with batching?
+SeBootCombinations3_stats1<-SeBootCombinations3 %>%
+  dplyr::select(Batch, Run1, meanCFU1, varCFU1) %>%
+  rename(Run=Run1, meanCFU=meanCFU1, varCFU=varCFU1)
+SeBootCombinations3_stats2<-SeBootCombinations3 %>%
+  dplyr::select(Batch, Run2, meanCFU2, varCFU2) %>%
+  rename(Run=Run2, meanCFU=meanCFU2, varCFU=varCFU2)
+SeBootCombinations3_stats<-rbind(SeBootCombinations3_stats1, SeBootCombinations3_stats2)
+rm(SeBootCombinations3_stats1, SeBootCombinations3_stats2)
+SeBootCombinations3_stats <-SeBootCombinations3_stats %>%
+  mutate(logMeanCFU=log10(meanCFU),
+         sdCFU=sqrt(varCFU)/meanCFU,
+         RunID=paste("Run", Run, sep=" ")
+  )
+# plot
+pSeBootCombinations3_stats<-SeBootCombinations3_stats %>%
+  #mutate(cvCFU=sdCFU/meanCFU) %>%
+  ggplot(aes(x=factor(Batch), y=logMeanCFU, color=factor(Batch)))+
+  #ggplot(aes(x=factor(Batch), y=sdCFU, color=factor(Batch)))+
+  geom_boxplot()+
+  theme_bw()+
+  scale_color_viridis_d(option="magma", end=0.85)+
+  facet_wrap(~RunID)+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    legend.title = element_blank()
+  )+
+  labs(x="Batch Size", y=expression(log[10]("Mean CFU")), fill="Batch",
+       title="Means, Zero-Enriched")
+pSeBootCombinations3_stats
+
+# merge?
+SeBootCombinations_stats$DataSet<-"Data"
+SeBootCombinations0_stats$DataSet<-"No Zeros"
+SeBootCombinations3_stats$DataSet<-"Zero Enriched"
+SeBootCombinationsAll_stats<-rbind(SeBootCombinations_stats,
+                                   SeBootCombinations0_stats,
+                                   SeBootCombinations3_stats)
+SeBootCombinationsAll_stats<-SeBootCombinationsAll_stats %>%
+  mutate(cvCFU=sdCFU/meanCFU)
+
+pSeBootCombinationsAll_stats_mean<-SeBootCombinationsAll_stats %>%
+  ggplot(aes(x=factor(Batch), y=meanCFU, color=factor(DataSet)))+
+  geom_boxplot()+
+  theme_bw()+
+  scale_y_log10()+
+  scale_color_viridis_d(option="cividis", end=0.85)+
+  facet_wrap(~RunID)+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    legend.title = element_blank()
+  )+
+  labs(x="Batch Size", y="Mean CFU", fill="",
+       title="Means")
+pSeBootCombinationsAll_stats_sd<-SeBootCombinationsAll_stats %>%
+  ggplot(aes(x=factor(Batch), y=sdCFU, color=factor(DataSet)))+
+  geom_boxplot()+
+  theme_bw()+
+  scale_y_log10()+
+  scale_color_viridis_d(option="cividis", end=0.85)+
+  facet_wrap(~RunID)+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    legend.title = element_blank()
+  )+
+  labs(x="Batch Size", y="sd(CFU)", fill="",
+       title="Standard Deviation")
+pSeBootCombinationsAll_stats_CV<-SeBootCombinationsAll_stats %>%
+  ggplot(aes(x=factor(Batch), y=cvCFU, color=factor(DataSet)))+
+  geom_boxplot()+
+  theme_bw()+
+  scale_y_log10()+
+  scale_color_viridis_d(option="cividis", end=0.85)+
+  facet_wrap(~RunID)+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    legend.title = element_blank()
+  )+
+  labs(x="Batch Size", y="cv(CFU)", fill="",
+       title="Coefficient of Variation")
+pSeBootCombinationsAll_stats_CV
+
+# combine 
+#pSeBootCombinations_stats + pSeBootCombinations0_stats  + pSeBootCombinations3_stats +
+pSeBootCombinations_testsummary + 
+  pSeBootCombinations0_testsummary + 
+  pSeBootCombinations3_testsummary + 
+  pSeBootCombinationsAll_stats_mean +
+  pSeBootCombinationsAll_stats_sd +
+  pSeBootCombinationsAll_stats_CV+
+  plot_layout(ncol=2, byrow=FALSE, guides='collect')+
+  plot_annotation(tag_levels = 'A') &
+  theme(legend.position='bottom')
+ggsave("FigS2_SeZeros.png", height=9, width=14, units="in", dpi=300)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #                       Section 2: 
 #            Multi-Modality in CFU/Worm Data
@@ -148,10 +428,6 @@ ggsave("FigS1_SeSingleWormBootStats.png", width=12, height=7, units="in", dpi=30
 # S. enterica and S. aureus colonization data and simulations thereof
 # The objects called here are generated in the main text script
 # and the code calls the function "wormbootGMM()"
-#library(tidyverse)
-#library(cowplot)
-#library(mclust, quietly=TRUE)
-#library(sBIC)
 
 # Using data for SE and SA with all experimental runs, zeros removed, run IDs as integers 1-3
 # Combined data as "Pooled"
@@ -223,7 +499,6 @@ pSePooledBICMclust<-fitBIC.df %>%
   labs(title=expression(paste(italic("S. enterica"), " LT2, Pooled")), x="# Components", y="BIC")
 pSePooledBICMclust
 
-
 # Here we are still fitting to the combined Salmonella colonization data.
 # Fitting a model with two components, allowing variances to be unequal ("V") or equal ("E")
 fit2 <- Mclust(X, G=2, model="E")
@@ -266,7 +541,7 @@ pSeAllDensityMclust<-newdata %>%
 pSeAllDensityMclust
 
 plot_grid(pSeCountAll, pSeAllDensityMclust, pSePooledBICMclust, ncol=3, labels="AUTO", align="h")
-ggsave("FigS1_SentericaMclust.png", width=10, height=3, dpi=400, units="in")
+ggsave("FigS3_SentericaMclust.png", width=10, height=3, dpi=400, units="in")
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # We can also look at each replicate individually
@@ -401,7 +676,7 @@ pSeBootGMM.1.2.05<-SeBootGMM.1.2.05 %>%
 pSeBootGMM.1.2.05
 
 plot_grid(pSeBootGMM, pSeBootGMM.1.2, pSeBootGMM.1.2.05, ncol=1, labels="AUTO")
-ggsave("FigS2_pSimSeGMM_run1v3.png", width=12, height=10, units="in", dpi=400)
+ggsave("FigS4_pSimSeGMM_run1v3.png", width=12, height=10, units="in", dpi=400)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -438,7 +713,7 @@ pSimBetaRHS + scale_x_discrete(labels=c("1"="B(0.1, 0.5)",
                                         "10"="B(1, 5)",
                                         "20"="B(2, 10)",
                                         "50"="B(5, 25)"))
-ggsave("FigS3_pSimBetaRHS_1_5.png", width=8, height=4, units="in", dpi=400)
+ggsave("FigS5_pSimBetaRHS_1_5.png", width=8, height=4, units="in", dpi=400)
 #ggsave("FigS3_pSimBetaRHS_1_5.pdf", width=8, height=4, units="in")
 
 # note that the mean of these is all 100000*0.16667 = 16667 expected
@@ -493,7 +768,7 @@ simBetaLHS %>%
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#        FIGURE S4  MOMENTS AND DISTANCES OF SIMULATED DATA; 
+#        FIGURE S6  MOMENTS AND DISTANCES OF SIMULATED DATA; 
 #                 RUN-TO-RUN VARIATION     
 #
 # ok back to beta starting at B(1,5) why not
@@ -546,9 +821,9 @@ wormSimBetaRand.1.5_long$logMean<-log10(wormSimBetaRand.1.5_long$mean)
 
 #plot out
 pSimBatchBetaRand.1.5.AB<-wormSimBetaRand.1.5_long %>%
-  relocate(set) %>%
-  relocate(logMean, .after=mean) %>%
-  select(-mean) %>%
+  dplyr::relocate(set) %>%
+  dplyr::relocate(logMean, .after=mean) %>%
+  dplyr::select(-mean) %>%
   rename(average=logMean) %>%
   pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
   ggplot(aes(x=batch, y=value, color=batch))+
@@ -562,7 +837,7 @@ pSimBatchBetaRand.1.5.AB<-wormSimBetaRand.1.5_long %>%
   facet_grid(rows=vars(moment), cols=vars(set), scales="free_y")
 
 pSimBatchBetaRand.1.5.dist<-wormSimBetaRand.1.5_dist %>%
-  relocate(set) %>%
+  dplyr::relocate(set) %>%
   rename(average=mean) %>%
   pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
   ggplot(aes(x=batch, y=value, color=batch))+
@@ -577,11 +852,11 @@ pSimBatchBetaRand.1.5.dist<-wormSimBetaRand.1.5_dist %>%
   facet_grid(rows=vars(moment), cols=vars(set), scales="free_y") 
 
 plot_grid(pSimBatchBetaRand.1.5.AB, pSimBatchBetaRand.1.5.dist, ncol=2, rel_widths = c(2,1), labels="AUTO")
-ggsave("FigS4_pSimBatchBetaRand.1.5.moments.png", width=12, height=10, units="in", dpi=400)      
+ggsave("FigS6_pSimBatchBetaRand.1.5.moments.png", width=12, height=10, units="in", dpi=400)      
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#################     FIGURE S5     #############################
+#################     FIGURE S7     #############################
 #### add data from symmetric distribution for comparison
 #note these runs use the flat U(-0.1,0.1) parameter error
 wormSimBetaRand.5.5<-wormSimBatchBetaCompare(5,5,5,5,1000,24,100000, 0.1)
@@ -641,16 +916,16 @@ pSimBatchBetaRand.5.5.meandist<-wormSimBetaRand.5.5 %>%
   labs(title=paste("\u03b2","(5,5) Distance"), y="Dist(Mean)", x="Batch Size")
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Assembling Figure S5
+# Assembling Figure S7
 plot_grid(pSimBatchBetaRand.1.5.meanA, pSimBatchBetaRand.5.5.meanA,
           pSimBatchBetaRand.1.5.meandist, pSimBatchBetaRand.5.5.meandist, 
           ncol=2, nrow=2, labels="AUTO", align = "h")
-ggsave("FigS5_pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=6, units="in", dpi=400)
+ggsave("FigS7_pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=6, units="in", dpi=400)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#               Figure S6
+#               Figure S8
 # Now more realistic - we allow triplicates, 
 # and cap the number of both total worms and digests we will perform
 #"small" is 100 worms and max 12 digests
@@ -710,7 +985,7 @@ wormSim3.1.5.m %>%
        x="Batch size",
        y=expression(log[10](Bacteria)),
        color="Replicate")
-ggsave("FigureS7_pwormSim3.1.5.examplerun.png", width=8, height=4, units="in", dpi=300)
+ggsave("FigureS8_pwormSim3.1.5.examplerun.png", width=8, height=4, units="in", dpi=300)
 
 ## plot differences in convergence of means for one-day vs. 3-day data
 wormSim3.5.5.m.means$meandist<-abs(wormSim3.5.5.m.means$meanA-wormSim3.5.5.m.means$meanB)/(wormSim3.5.5.m.means$meanA+wormSim3.5.5.m.means$meanB)
@@ -740,11 +1015,11 @@ pSimBatchBetaRand.5.5.meandist3days<-wormSim3.5.5.m.means %>%
   labs(title=paste("\u03b2","(5,5)x3 Distance"), y="Dist(Mean)", x="Batch Size")
 #pSimBatchBetaRand.5.5.meandist3days
 
-# Figure S6
+# Figure S8
 plot_grid(pSimBatchBetaRand.5.5.meanA,pSimBatchBetaRand.5.5.mean3days,
           pSimBatchBetaRand.5.5.meandist,pSimBatchBetaRand.5.5.meandist3days, 
           align="h")
-ggsave("FigS6_pSimBatchBetaRand.5.5.meancompare3days.png", width=6, height=6, units="in")
+ggsave("FigS8_pSimBatchBetaRand.5.5.meancompare3days.png", width=6, height=6, units="in")
 
 ## The mean converges nicely, and the distance between means is low, in the 3-day data
 
@@ -774,6 +1049,8 @@ plot_grid(pSimBatchBetaRand.1.5.meanA, pSimBatchBetaRand.1.5.mean3days, pSimBatc
 ggsave("pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=8, units="in")
 
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ###########  What if we instead take the populations of means in regressions?
 wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, maxCFU=100000)
 glimpse(wormSimF.1.5)
