@@ -412,6 +412,7 @@ pSeBootCombinations_ttest<-SeBootCombinations %>%
   geom_jitter(width=0.05, alpha=0.1)+
   geom_hline(yintercept=0.05)+
   theme_bw()+
+  scale_color_viridis_d(option="magma", end=0.85)+
   facet_grid(vars(Run1ID), vars(Run2ID))+
   theme(
     text=element_text(size=xTextSize), 
@@ -427,6 +428,7 @@ pSeBootCombinations_wilcoxon<-SeBootCombinations %>%
   geom_jitter(width=0.05, alpha=0.1)+
   geom_hline(yintercept=0.05)+
   theme_bw()+
+  scale_color_viridis_d(option="magma", end=0.85)+
   facet_grid(vars(Run1ID), vars(Run2ID))+
   theme(
     text=element_text(size=xTextSize), 
@@ -511,6 +513,12 @@ pSeBootCombinations_SWtest_summary<-SeBootCombinations_SWtest_summary %>%
   labs(x="Batch Size", y="Fraction Significant", fill="Run",
        title=expression(paste(italic("S. enterica"), " Bootstrap Shapiro-Wilk")))
 pSeBootCombinations_SWtest_summary
+
+# assemble
+(pSeBootCombinations_ttest + pSeBootCombinations_testsummary)/ 
+  (pSeBootCombinations_wilcoxon + pSeBootCombinations_SWtest_summary) +
+  plot_layout(widths=c(1.5,1), guides="collect") + plot_annotation(tag_levels = 'A')
+ggsave("FigS1_SeSingleWormBootStats.png", width=12, height=7, units="in", dpi=300)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
