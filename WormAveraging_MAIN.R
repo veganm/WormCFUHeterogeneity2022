@@ -257,12 +257,17 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
 # Real data from batch digests 2022-2-18,
 # N2 worms with Staphylococcus aureus
 
-BatchDigests<-read.table("batchdigests.txt", header=TRUE)
+SaSeCountAll<-read_xlsx("SaSeCount.xlsx")  # full data file
+
+BatchDigests<-SaSeCountAll %>%
+  dplyr::filter(Condition=="SA" & Run==6) # run with single worms and batch digests
+
 BatchDigests$Batch<-as.factor(BatchDigests$Batch)
 pBatchSA<-BatchDigests %>%
   ggplot(aes(x=Batch, y=logCFU, color=Batch)) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + theme_classic() + 
+  scale_color_viridis_d(option="magma", end=0.8)+
   theme(text=element_text(size=xTextSize), 
         axis.title.x = element_blank(), 
         axis.text.x = element_blank(),
@@ -273,13 +278,12 @@ pBatchSA<-BatchDigests %>%
         legend.position.inside=c(0.9,0.3)) + 
   labs(title=expression(paste(italic("S. aureus"), " Newman")), y=expression(log[10](CFU/Worm)))
 pBatchSA
-#ggsave("pBatchSA.png", width=4, height=3, units="in", dpi=300)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Now Salmonella enterica LT2-GFP single worms (fed on plates)
-# and S. aureus-GFP
+# Now Salmonella enterica LT2-GFP and S. aureus-GFP in single worm digests (N2)
 
-SaSeCount<-read_xlsx("SaSeCount.xlsx")  
+SaSeCount<-SaSeCountAll %>%
+  dplyr::filter(Batch==1) # single worms only
 
 # Note that runs 1-3 of S. aureus have a different TOD
 # with dilutions 1-3 plated; 
@@ -300,9 +304,9 @@ SaSeCount %>%
 SaSeCount %>%
   group_by(Condition, Run) %>%
   summarise(count=n(),
-            medianCFU=median(CFU, na.rm=TRUE),
-            meanCFU=mean(CFU, na.rm=TRUE),
-            sdCFU=sd(CFU, na.rm=TRUE),
+            medianFinalCount=median(FinalCount, na.rm=TRUE),
+            meanFinalCount=mean(FinalCount, na.rm=TRUE),
+            sdFinalCount=sd(FinalCount, na.rm=TRUE),
             medianLogCFU=median(logCFU, na.rm=TRUE),
             meanLogCFU=mean(logCFU, na.rm=TRUE),
             sdLogCFU=sd(logCFU, na.rm = TRUE)
@@ -331,9 +335,9 @@ SaSeCount2 %>%
 SaSeCount2 %>%
   group_by(Condition, Run) %>%
   summarise(count=n(),
-            medianCFU=median(CFU, na.rm=TRUE),
-            meanCFU=mean(CFU, na.rm=TRUE),
-            sdCFU=sd(CFU, na.rm=TRUE),
+            medianFinalCount=median(FinalCount, na.rm=TRUE),
+            meanFinalCount=mean(FinalCount, na.rm=TRUE),
+            sdFinalCount=sd(FinalCount, na.rm=TRUE),
             medianLogCFU=median(logCFU, na.rm=TRUE),
             meanLogCFU=mean(logCFU, na.rm=TRUE),
             sdLogCFU=sd(logCFU, na.rm = TRUE)
@@ -352,12 +356,6 @@ temp1<-SaSeCount %>%
   dplyr::filter(Condition=="SE" & Run=="3")
 temp2<-SaSeCount %>%
   dplyr::filter(Condition=="SE" & Run=="2")
-
-# summary statistics
-mean(temp1$CFU)
-median(temp1$CFU)
-mean(temp2$CFU)
-median(temp2$CFU)
 
 SeBoot1<-bootOnCounts(n_reps=dim(temp1)[1], mydata=temp1)
 SeBoot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2)
@@ -394,25 +392,6 @@ pJointSEBoot<-jointSeBoot %>%
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 pJointSEBoot
 
-#and some statistical tests on the bootstrapped data
-t.test(SeBoot1$logCFU[SeBoot1$Batch==1], SeBoot2$logCFU[SeBoot2$Batch==1])
-t.test(SeBoot1$logCFU[SeBoot1$Batch==5], SeBoot2$logCFU[SeBoot2$Batch==5])
-t.test(SeBoot1$logCFU[SeBoot1$Batch==10], SeBoot2$logCFU[SeBoot2$Batch==10])
-t.test(SeBoot1$logCFU[SeBoot1$Batch==20], SeBoot2$logCFU[SeBoot2$Batch==20])
-t.test(SeBoot1$logCFU[SeBoot1$Batch==50], SeBoot2$logCFU[SeBoot2$Batch==50])
-
-# and tests for normality
-# Shapiro-Wilk
-shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==1])
-shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==5]) #ns
-shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==10])
-shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==20])
-shapiro.test(SeBoot1$logCFU[SeBoot1$Batch==50])
-shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==1])
-shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==5])
-shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==10])
-shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==20])
-shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==50]) #ns
 #rm(SeBoot1, SeBoot2, temp1, temp2)
 
 #~~~~~~~~~~~
@@ -420,8 +399,6 @@ shapiro.test(SeBoot2$logCFU[SeBoot2$Batch==50]) #ns
 
 input_data<-SaSeCount %>%
   dplyr::filter(Condition=="SE")
-input_data<-input_data %>%
-  rename(FinalCount=CFU)
 SeBootCombinations<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
                                                 FoldD=10, correction_constant=20)
 glimpse(SeBootCombinations)
@@ -429,41 +406,133 @@ glimpse(SeBootCombinations)
 SeBootCombinations$Run1ID<-paste("Run", SeBootCombinations$Run1, sep=" ")
 SeBootCombinations$Run2ID<-paste("Run", SeBootCombinations$Run2, sep=" ")
 
-SeBootCombinations %>%
+pSeBootCombinations_ttest<-SeBootCombinations %>%
   ggplot(aes(x=factor(Batch), y=p_t, color=factor(Batch)))+
   geom_violin(fill=NA)+
   geom_jitter(width=0.05, alpha=0.1)+
+  geom_hline(yintercept=0.05)+
   theme_bw()+
   facet_grid(vars(Run1ID), vars(Run2ID))+
-  labs(x="Batch Size", y="t-test p-value", color="Batch")
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="t-test p-value", color="Batch",
+       title=expression(paste(italic("S. enterica"), " Bootstrap t-tests")))
+pSeBootCombinations_ttest
 
-SeBootCombinations %>%
+pSeBootCombinations_wilcoxon<-SeBootCombinations %>%
   ggplot(aes(x=factor(Batch), y=p_w, color=factor(Batch)))+
   geom_violin(fill=NA)+
   geom_jitter(width=0.05, alpha=0.1)+
+  geom_hline(yintercept=0.05)+
   theme_bw()+
   facet_grid(vars(Run1ID), vars(Run2ID))+
-  labs(x="Batch Size", y="Wilcoxon p-value", color="Batch")
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Wilcoxon p-value", color="Batch",
+       title=expression(paste(italic("S. enterica"), " Bootstrap Wilcoxon")))
+pSeBootCombinations_wilcoxon
 
+#~~~~~~~~~~~~~~~
+# how many comparisons are significant for each test?
+SeBootCombinations<-SeBootCombinations %>%
+  mutate(isSig_t=as.integer(as.logical(p_t<0.05)),
+         isSig_w=as.integer(as.logical(p_w<0.05)),
+         RunPair=paste(Run1ID, "v", Run2ID, sep=" "))
+
+# plot fraction significant tests
+SeBootCombinations_testsummary<-SeBootCombinations %>%
+  group_by(RunPair, Batch) %>%
+  summarize(countSigT=sum(isSig_t),
+            countSigW=sum(isSig_w),
+            n=n()) %>%
+  mutate(fracSigT=countSigT/n,
+         fracSigW=countSigW/n) %>%
+  ungroup() %>%
+  dplyr::select(RunPair, Batch, fracSigT, fracSigW) %>%
+  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+               names_prefix = "fracSig", values_to = "fracSig")
+
+# remove redundant pairs
+pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
+            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
+# plot
+pSeBootCombinations_testsummary<-SeBootCombinations_testsummary %>%
+  dplyr::filter(RunPair %in% pair_list) %>%
+  ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title=expression(paste(italic("S. enterica"), " Bootstrap Pairwise Tests")))+
+  facet_wrap(~RunPair)
+pSeBootCombinations_testsummary
+
+## how many bootstrap replicates are indistinguishable from Gaussian?
+SeBootCombinations_SWtest1<-SeBootCombinations %>%
+  dplyr::select(Batch, Run1, p_sw1) %>%
+  rename(Run=Run1, p_sw=p_sw1)
+SeBootCombinations_SWtest2<-SeBootCombinations %>%
+  dplyr::select(Batch, Run2, p_sw2) %>%
+  rename(Run=Run2, p_sw=p_sw2)
+SeBootCombinations_SWtest<-rbind(SeBootCombinations_SWtest1, SeBootCombinations_SWtest2)
+rm(SeBootCombinations_SWtest1, SeBootCombinations_SWtest2)
+SeBootCombinations_SWtest<-SeBootCombinations_SWtest %>%
+  mutate(isGaussian=as.integer(as.logical(p_sw>0.05)))
+glimpse(SeBootCombinations_SWtest)
+
+SeBootCombinations_SWtest_summary<-SeBootCombinations_SWtest %>%
+  group_by(Run, Batch) %>%
+  summarize(numGaussian=sum(isGaussian),
+            n=n()) %>%
+  mutate(fracGaussian=numGaussian/n) %>%
+  ungroup()
+
+# plot
+pSeBootCombinations_SWtest_summary<-SeBootCombinations_SWtest_summary %>%
+  ggplot(aes(x=factor(Batch), y=fracGaussian, fill=factor(Run)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  #scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  scale_fill_viridis_d(end=0.9)+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Run",
+       title=expression(paste(italic("S. enterica"), " Bootstrap Shapiro-Wilk")))
+pSeBootCombinations_SWtest_summary
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
 temp<-dplyr::filter(SaSeCount, Condition=="SE")
 idx<-which(temp$Count==0)
 temp$Count[idx]<-1
-temp$CFU[idx]<-20
-temp$logCFU[idx]<-log10[20]
+temp$FinalCount[idx]<-20
+temp$CFUPerWorm[idx]<-20
+temp$logCFU[idx]<-log10(20)
 
 temp1A<-temp %>%
-  dplyr::filter(Run=="1")
+  dplyr::filter(Run=="3")
 temp2A<-temp %>%
   dplyr::filter(Run=="2")
 
 SeBoot1A<-bootOnCounts(n_reps=dim(temp1A)[1], mydata=temp1A)
 SeBoot2A<-bootOnCounts(n_reps=dim(temp2A)[1], mydata=temp2A)
-SeBoot1A$Run<-as.factor("Run1")
+SeBoot1A$Run<-as.factor("Run3")
 SeBoot2A$Run<-as.factor("Run2")
 jointSeBoot_nozeros<-rbind(SeBoot1A, SeBoot2A)
+idx<-which(!is.finite(jointSeBoot_nozeros$logCFU))
+jointSeBoot_nozeros$logCFU[idx]<-0
 
 pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
   dplyr::filter(Batch<20) %>% # sufficient to make the point
@@ -494,23 +563,23 @@ pJointSEBoot_nozeros
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # and with extra zeros
-
 # implemented as higher TOD, call it 10^3
 temp<-dplyr::filter(SaSeCount, Condition=="SE")
 idx<-which(temp$logCFU<3)
 temp$Count[idx]<-0
 temp$D[idx]<-0
-temp$CFU[idx]<-0
+temp$FinalCount[idx]<-0
+temp$CFUPerWorm[idx]<-0
 temp$logCFU[idx]<-0
 
 temp1B<-temp %>%
-  dplyr::filter(Run=="1")
+  dplyr::filter(Run=="3")
 temp2B<-temp %>%
   dplyr::filter(Run=="2")
 
 SeBoot1B<-bootOnCounts(n_reps=dim(temp1B)[1], mydata=temp1B)
 SeBoot2B<-bootOnCounts(n_reps=dim(temp2B)[1], mydata=temp2B)
-SeBoot1B$Run<-as.factor("Run1")
+SeBoot1B$Run<-as.factor("Run3")
 SeBoot2B$Run<-as.factor("Run2")
 jointSeBoot_zeros3<-rbind(SeBoot1B, SeBoot2B)
 
