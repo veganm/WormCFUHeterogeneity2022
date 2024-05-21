@@ -60,6 +60,7 @@ bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), FoldD=10, co
   
   dataSet<-dataSet %>%
     mutate(logCFU=log10(FinalCount))
+  if (sum(is.infinite(dataSet$logCFU))>0){dataSet$logCFU[is.infinite(dataSet$logCFU)]<-0}
   
   return(dataSet)
 }
@@ -73,13 +74,13 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   # Calls bootOnCounts() for basic functionality.
   # 
   # IF A DATA SET OF INDIVIDUAL-BASED DATA IS PROVIDED
-  #   - The data set must contain at least two runs of data, ideally with 10+ data points in each
+  #   - The data set must contain at least two runs of data, ideally with 18+ data points in each
   #   - Function assumes no subsampling (each individual is essentially a unit-1 subsample)
   #   - Generates resampled data plus Poisson noise for individual and batch-based measurements
   #   - Returns data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at each batch size
   #
   # IF A DATA SET OF BATCH-BASED DATA IS PROVIDED
-  #   - The data set must contain at least two runs of data, ideally with 10+ data points in each
+  #   - The data set must contain at least two runs of data, ideally with 18+ data points in each
   #   - Generates resampled data plus Poisson noise using the indicated weighting from input data
   #   - Returns data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at each batch size
   # 
@@ -251,13 +252,16 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
 ###############################################################################
 #  DATA ANALYSIS AND FIGURES
 #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#           Section 1:
+#   Batching skews inferred counts and inflates false positive rates
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~   Figure 1A
 # Real data from batch digests 2022-2-18,
 # N2 worms with Staphylococcus aureus
 
-SaSeCountAll<-read_xlsx("SaSeCount.xlsx")  # full data file
+SaSeCountAll<-read_xlsx("SaSeCount.xlsx")  # full data file including single worm data
 
 BatchDigests<-SaSeCountAll %>%
   dplyr::filter(Condition=="SA" & Run==6) # run with single worms and batch digests
@@ -280,7 +284,7 @@ pBatchSA<-BatchDigests %>%
 pBatchSA
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Now Salmonella enterica LT2-GFP and S. aureus-GFP in single worm digests (N2)
+# Now pull Salmonella enterica LT2-GFP and S. aureus-GFP single worm digests (N2)
 
 SaSeCount<-SaSeCountAll %>%
   dplyr::filter(Batch==1) # single worms only
@@ -300,7 +304,7 @@ SaSeCount %>%
     legend.position = "none") +
   facet_wrap(vars(Condition), scales="free_x")
 
-# summary statistics
+# summary statistics for text
 SaSeCount %>%
   group_by(Condition, Run) %>%
   summarise(count=n(),
@@ -313,7 +317,7 @@ SaSeCount %>%
             )
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#take out the zeros
+#without the zeros
 SaSeCount2<-SaSeCount
 SaSeCount2$Count[SaSeCount2$Count==0]<-NA
 SaSeCount2<-SaSeCount2[complete.cases(SaSeCount2),]
@@ -395,16 +399,17 @@ pJointSEBoot
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
-temp<-dplyr::filter(SaSeCount, Condition=="SE")
-idx<-which(temp$Count==0)
-temp$Count[idx]<-1
-temp$FinalCount[idx]<-20
-temp$CFUPerWorm[idx]<-20
-temp$logCFU[idx]<-log10(20)
+temp0<-dplyr::filter(SaSeCount, Condition=="SE")
+idx<-which(temp0$Count==0)
+temp0[idx,] # quick look
+temp0$Count[idx]<-1
+temp0$FinalCount[idx]<-20
+temp0$CFUPerWorm[idx]<-20
+temp0$logCFU[idx]<-log10(20)
 
-temp1A<-temp %>%
+temp1A<-temp0 %>%
   dplyr::filter(Run=="3")
-temp2A<-temp %>%
+temp2A<-temp0 %>%
   dplyr::filter(Run=="2")
 
 SeBoot1A<-bootOnCounts(n_reps=dim(temp1A)[1], mydata=temp1A)
@@ -416,7 +421,7 @@ idx<-which(!is.finite(jointSeBoot_nozeros$logCFU))
 jointSeBoot_nozeros$logCFU[idx]<-0
 
 pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
-  dplyr::filter(Batch<20) %>% # sufficient to make the point
+  dplyr::filter(Batch<50) %>% # sufficient to make the point
   ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
@@ -445,17 +450,21 @@ pJointSEBoot_nozeros
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # and with extra zeros
 # implemented as higher TOD, call it 10^3
-temp<-dplyr::filter(SaSeCount, Condition=="SE")
-idx<-which(temp$logCFU<3)
-temp$Count[idx]<-0
-temp$D[idx]<-0
-temp$FinalCount[idx]<-0
-temp$CFUPerWorm[idx]<-0
-temp$logCFU[idx]<-0
+temp3<-dplyr::filter(SaSeCount, Condition=="SE")
+idx<-which(temp3$logCFU<3)
+temp3$Count[idx]<-0
+temp3$D[idx]<-0
+temp3$FinalCount[idx]<-0
+temp3$CFUPerWorm[idx]<-0
+temp3$logCFU[idx]<-0
 
-temp1B<-temp %>%
+# quick check
+idx03<-which(temp$Count==0)
+view(temp[idx03,]) # quick look
+
+temp1B<-temp3 %>%
   dplyr::filter(Run=="3")
-temp2B<-temp %>%
+temp2B<-temp3 %>%
   dplyr::filter(Run=="2")
 
 SeBoot1B<-bootOnCounts(n_reps=dim(temp1B)[1], mydata=temp1B)
@@ -465,7 +474,7 @@ SeBoot2B$Run<-as.factor("Run2")
 jointSeBoot_zeros3<-rbind(SeBoot1B, SeBoot2B)
 
 pJointSEBoot_zeros3<-jointSeBoot_zeros3 %>%
-  dplyr::filter(Batch<20) %>% # sufficient to make the point
+  dplyr::filter(Batch<50) %>% # sufficient to make the point
   ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
