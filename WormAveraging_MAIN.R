@@ -280,7 +280,8 @@ pBatchSA<-BatchDigests %>%
         axis.text.y = element_text(size=xTextSize-1),
         legend.text = element_text(size=xTextSize-1),
         legend.position.inside=c(0.9,0.3)) + 
-  labs(title=expression(paste(italic("S. aureus"), " Newman")), y=expression(log[10](CFU/Worm)))
+  labs(title=expression(italic("S. aureus")), y=expression(log[10](CFU/Worm)))
+  #labs(title=expression(paste(italic("S. aureus"), " Newman")), y=expression(log[10](CFU/Worm)))
 pBatchSA
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -315,6 +316,32 @@ SaSeCount %>%
             meanLogCFU=mean(logCFU, na.rm=TRUE),
             sdLogCFU=sd(logCFU, na.rm = TRUE)
             )
+
+# Salmonella only
+pSE_Raw<-SaSeCount %>%
+  dplyr::filter(Condition=="SE") %>%
+  mutate(Run=as.factor(Run)) %>%
+  ggplot(aes(x=Run, y=logCFU, color=Run)) + 
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_violin(fill=NA) + 
+  scale_color_viridis_d(end=0.8) +
+  ylim(-0.1,6)+ theme_classic() + 
+  theme(
+    text=element_text(size=14), 
+    axis.title.x = element_blank(), 
+    axis.text.x = element_blank(), 
+    plot.title=element_text(hjust=0.5,size=14)
+    ) +
+  labs(x="Experiment", y=expression(log[10](CFU/worm), color="Run"), 
+       title=expression(italic("S. enterica")))
+pSE_Raw
+
+wilcox.test(SaSeCount$logCFU[SaSeCount$Condition=="SE" & SaSeCount$Run==1], 
+            SaSeCount$logCFU[SaSeCount$Condition=="SE" & SaSeCount$Run==2])
+wilcox.test(SaSeCount$logCFU[SaSeCount$Condition=="SE" & SaSeCount$Run==1], 
+            SaSeCount$logCFU[SaSeCount$Condition=="SE" & SaSeCount$Run==3])
+wilcox.test(SaSeCount$logCFU[SaSeCount$Condition=="SE" & SaSeCount$Run==2], 
+            SaSeCount$logCFU[SaSeCount$Condition=="SE" & SaSeCount$Run==3])
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #without the zeros
@@ -385,7 +412,8 @@ pJointSEBoot<-jointSeBoot %>%
 	  plot.title=element_text(hjust=0.5,size=xTextSize),
 	  #legend.position.inside=c(0.9,0.3),
 	  legend.title = element_blank(),
-	  legend.text = element_text(size=xTextSize-1)
+	  legend.text = element_text(size=xTextSize-1),
+	  legend.position = "none"
 	  )+
   facet_wrap(vars(Batch), ncol=5)+
   labs(title=expression(paste(italic("S. enterica"), " Simulated Batch Digests")), 
@@ -437,7 +465,8 @@ pJointSEBoot_nozeros<-jointSeBoot_nozeros %>%
     plot.title=element_text(hjust=0.5,size=xTextSize),
     #legend.position.inside=c(0.9,0.3),
     legend.title = element_blank(),
-    legend.text = element_text(size=xTextSize-1)
+    legend.text = element_text(size=xTextSize-1),
+    legend.position = "none"
   )+
   facet_wrap(vars(Batch), ncol=5)+
   labs(title="Zeros removed", x="Run", y=expression(log[10](CFU/Worm)))+
@@ -491,7 +520,8 @@ pJointSEBoot_zeros3<-jointSeBoot_zeros3 %>%
     plot.title=element_text(hjust=0.5,size=xTextSize),
     #legend.position.inside=c(0.9,0.3),
     legend.title = element_blank(),
-    legend.text = element_text(size=xTextSize-1)
+    legend.text = element_text(size=xTextSize-1),
+    legend.position = "none"
   )+
   facet_wrap(vars(Batch), ncol=5)+
   labs(title="Zero-enriched", x="Run", y=expression(log[10](CFU/Worm)))+
@@ -505,11 +535,8 @@ pJointSEBoot_zeros3
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~    Build Figure 1
 # Plot out SE bootstraps together with real data from S. aureus batch size experiment
-#Fig1AB<-plot_grid(pBatchSA, pJointSEBoot, labels="AUTO", ncol=2, rel_widths=c(1,3))
-#Fig1CD<-plot_grid(pJointSEBoot_nozeros, pJointSEBoot_zeros3, labels=c("C", "D"), ncol=2)
-#plot_grid(Fig1AB, Fig1CD, ncol=1)
 
-(pBatchSA + pJointSEBoot + plot_layout(ncol=2, widths=c(1,3))) /
+(pBatchSA + pSE_Raw + pJointSEBoot + plot_layout(ncol=3, widths=c(1,1,3))) /
   (pJointSEBoot_nozeros + pJointSEBoot_zeros3 + plot_layout(ncol=2)) +
   plot_layout(guides="collect")+
   plot_annotation(tag_levels = 'A')
@@ -742,7 +769,7 @@ AllCountStats.r2r<-AllCountsStats.r2r %>%
          logq50=log10(q50))
 
 pAllCountStats<- AllCountStats.r2r %>% 
-  select(Condition, logmeanCFU, skewCFU, kurtCFU, Q1, Q2, cvCFU, logq50) %>%
+  dplyr::select(Condition, logmeanCFU, skewCFU, kurtCFU, Q1, Q2, cvCFU, logq50) %>%
   pivot_longer(., cols = c(logmeanCFU, skewCFU, kurtCFU, Q1, Q2, cvCFU, logq50), names_to = "Var", values_to = "Value") %>%
   ggplot(aes(x=Condition, y=Value, color=Condition))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
