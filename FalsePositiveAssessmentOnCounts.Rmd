@@ -187,7 +187,7 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
               Boot2s<-Boot2 %>%
                 filter(Batch==batch_sizes[k])
               Boot.t<-t.test(Boot1s$logCFU, Boot2s$logCFU)
-              Boot.w<-wilcox.test(Boot1s$logCFU, Boot2s$logCFU)
+              Boot.w<-wilcox.test(Boot1s$logCFU, Boot2s$logCFU, exact=FALSE)
               sw1<-shapiro.test(Boot1s$logCFU)
               sw2<-shapiro.test(Boot2s$logCFU)
               
@@ -446,8 +446,8 @@ jointBoot %>%
 	  legend.text = element_text(size=xTextSize-1)
 	  )+
   facet_wrap(vars(Batch), ncol=5)+
-  labs(title=expression(paste(italic("Bacteria"), " Simulated Batch Digests")), 
-       y=expression(log[10](CFU)), x="Run")+
+  labs(title="Simulated Batch Data", 
+       y=expression(log[10]("Total Count")), x="Run")+
   stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 ```
