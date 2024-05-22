@@ -112,7 +112,7 @@ SeBootCombinations_stats <-SeBootCombinations_stats %>%
          RunID=paste("Run", Run, sep=" ")
          )
 # plot
-pSeBootCombinations_stats<-SeBootCombinations_stats %>%
+pSeBootCombinations_stats_mean<-SeBootCombinations_stats %>%
   ggplot(aes(x=factor(Batch), y=logMeanCFU, color=factor(Batch)))+
   geom_boxplot()+
   #geom_jitter(width=0.1, alpha=0.1)+
@@ -126,7 +126,7 @@ pSeBootCombinations_stats<-SeBootCombinations_stats %>%
   )+
   labs(x="Batch Size", y=expression(log[10]("Mean CFU")), fill="Batch",
        title=expression(paste(italic("S. enterica"), " Bootstrap Means")))
-pSeBootCombinations_stats
+pSeBootCombinations_stats_mean
 
 ## how many bootstrap replicates are indistinguishable from Gaussian?
 SeBootCombinations_SWtest1<-SeBootCombinations %>%
@@ -168,10 +168,10 @@ pFigS1AB<-(pSeBootCombinations_ttest/pSeBootCombinations_wilcoxon) +
   plot_annotation(tag_levels = 'A')
 #pFigS1AB
 pFigS1CDE<-plot_grid(pSeBootCombinations_testsummary,
-                       pSeBootCombinations_stats ,
+                       pSeBootCombinations_stats_mean ,
                        pSeBootCombinations_SWtest_summary,
                      ncol=1, labels=c('C', 'D', 'E'))
-#pFigS1CDE
+pFigS1CDE
 wrap_elements(pFigS1AB) | wrap_elements(pFigS1CDE)
 ggsave("FigS1_SeSingleWormBootStats.png", width=12, height=7, units="in", dpi=300)
 
@@ -246,10 +246,10 @@ SeBootCombinations0_stats <-SeBootCombinations0_stats %>%
          RunID=paste("Run", Run, sep=" ")
   )
 # plot
-pSeBootCombinations0_stats<-SeBootCombinations0_stats %>%
+pSeBootCombinations0_stats_cv<-SeBootCombinations0_stats %>%
   #ggplot(aes(x=factor(Batch), y=logMeanCFU, color=factor(Batch)))+
   mutate(cvCFU=sdCFU/meanCFU) %>%
-  ggplot(aes(x=factor(Batch), y=sdCFU, color=factor(Batch)))+
+  ggplot(aes(x=factor(Batch), y=cvCFU, color=factor(Batch)))+
   geom_boxplot()+
   theme_bw()+
   scale_color_viridis_d(option="magma", end=0.85)+
@@ -259,9 +259,9 @@ pSeBootCombinations0_stats<-SeBootCombinations0_stats %>%
     plot.title=element_text(hjust=0.5),
     legend.title = element_blank()
   )+
-  labs(x="Batch Size", y=expression(log[10]("Mean CFU")), fill="Batch",
-       title="Means, Zeros Removed")
-pSeBootCombinations0_stats
+  labs(x="Batch Size", y="sd(CFU)", fill="Batch",
+       title="CV, Zeros Removed")
+pSeBootCombinations0_stats_cv
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Same bootstrap with zeros enriched
@@ -336,7 +336,7 @@ SeBootCombinations3_stats <-SeBootCombinations3_stats %>%
          RunID=paste("Run", Run, sep=" ")
   )
 # plot
-pSeBootCombinations3_stats<-SeBootCombinations3_stats %>%
+pSeBootCombinations3_stats_mean<-SeBootCombinations3_stats %>%
   #mutate(cvCFU=sdCFU/meanCFU) %>%
   ggplot(aes(x=factor(Batch), y=logMeanCFU, color=factor(Batch)))+
   #ggplot(aes(x=factor(Batch), y=sdCFU, color=factor(Batch)))+
@@ -351,7 +351,7 @@ pSeBootCombinations3_stats<-SeBootCombinations3_stats %>%
   )+
   labs(x="Batch Size", y=expression(log[10]("Mean CFU")), fill="Batch",
        title="Means, Zero-Enriched")
-pSeBootCombinations3_stats
+pSeBootCombinations3_stats_mean
 
 # merge?
 SeBootCombinations_stats$DataSet<-"Data"
@@ -405,7 +405,7 @@ pSeBootCombinationsAll_stats_CV<-SeBootCombinationsAll_stats %>%
   )+
   labs(x="Batch Size", y="cv(CFU)", fill="",
        title="Coefficient of Variation")
-pSeBootCombinationsAll_stats_CV
+#pSeBootCombinationsAll_stats_CV
 
 # combine 
 #pSeBootCombinations_stats + pSeBootCombinations0_stats  + pSeBootCombinations3_stats +
@@ -435,17 +435,20 @@ ggsave("FigS2_SeZeros.png", height=9, width=14, units="in", dpi=300)
 # The filtered object is created on line 124
 
 mylen<-dim(SaSeCount2)[1]
-SaSeCount2$Rep<-as.factor(SaSeCount2$Rep)
-SaSeCountPool<-rbind(SaSeCount2, data.frame(Condition=SaSeCount2$Condition,
-                                            Rep=rep("Pooled", mylen), # add pooled condition
+SaSeCount2$Run<-as.factor(SaSeCount2$Run)
+SaSeCount2 <- SaSeCount2 %>%
+  dplyr::select(!FinalCount)
+SaSeCountPool<-rbind(SaSeCount2, tibble(Condition=SaSeCount2$Condition,
+                                        Run="Pooled", # add pooled condition
+                                        Batch=1,
                                             Count=SaSeCount2$Count,
                                             D=SaSeCount2$D,
-                                            CFU=SaSeCount2$CFU,
+                                            CFUPerWorm=SaSeCount2$CFUPerWorm,
                                             logCFU=SaSeCount2$logCFU
 ))
 pSeCountAll<-SaSeCountPool %>%
   filter(Condition=="SE") %>%
-  ggplot(aes(x=Rep, y=logCFU, color=Rep)) +
+  ggplot(aes(x=Run, y=logCFU, color=Run)) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_violin(fill=NA) + 
   theme_classic() + 
@@ -456,16 +459,15 @@ pSeCountAll<-SaSeCountPool %>%
         plot.title=element_text(hjust=0.5, size=14),
         ) + 
   # facet_wrap(vars(Condition), scales="free_x") +
-  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)), color="Replicate")
-#ggsave("pSECountAll.png", width=4, height=3, units="in", dpi=300)
+  labs(title=expression(paste(italic("S. enterica"), " LT2")), y=expression(log[10](CFU/Worm)), color="Run")
 pSeCountAll
 
 #ok let's try some gaussian mixture models (code from vignette)
-X<-SaSeCountPool$logCFU[SaSeCountPool$Condition=="SE" & SaSeCountPool$Rep=="Pooled"]
+X<-SaSeCountPool$logCFU[SaSeCountPool$Condition=="SE" & SaSeCountPool$Run=="Pooled"]
 mean(X)
 var(X)
-mean(SaSeCountPool$CFU[SaSeCountPool$Condition=="SE"& SaSeCountPool$Rep=="Pooled"])
-sd(SaSeCountPool$CFU[SaSeCountPool$Condition=="SE"& SaSeCountPool$Rep=="Pooled"])
+mean(SaSeCountPool$CFU[SaSeCountPool$Condition=="SE"& SaSeCountPool$Run=="Pooled"])
+sd(SaSeCountPool$CFU[SaSeCountPool$Condition=="SE"& SaSeCountPool$Run=="Pooled"])
 
 fit<- mclustBIC(X)
 fit
