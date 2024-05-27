@@ -56,7 +56,7 @@ bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), FoldD=10, co
   }
   
   # unfold data
-  dataSet<-dplyr::bind_rows(temp)
+  dataSet<-dplyr::bind_rows(temp) # unpack
   
   dataSet<-dataSet %>%
     mutate(logCFU=log10(FinalCount))
@@ -89,9 +89,8 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   #   Count (num): Number of raw counts associated with each sample
   #   Batch (int): batch size or weight of each sample.
   #         Batch=1 is the minimum and indicates individual-based sampling.
-  #   D (num, optional): Fold dilution at which counts were taken
+  #   D (num): Fold dilution at which counts were taken
   #         (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc)
-  #         ***IF D IS NOT GIVEN, FinalCount MUST ALREADY EXIST IN THE DATA SET***
   #   FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling.
   #         Will be calculated if not present.
   # Each row of the data set represents one measurement.
@@ -114,16 +113,16 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
     if(length(which(my_names=="D"))!=0){ # if we are given a dilution factor
       input_data$FinalCount<-(correction_constant *(input_data$Count*FoldD^input_data$D))/Batch
     } else if(length(which(my_names=="D"))==0){
-      stop("Either fold dilution D or FinalCount must be a column in input_data!")
+      stop("Fold dilution D must be a column in input_data!")
     }
-      else{
+    else{
       input_data$FinalCount<-(correction_constant * input_data$Count)/Batch
     }
   } 
   # now we should have final counts
   
   # Are data individual or batch-based?
-  isIndividual<-max(input_data$Batch == 1)
+  isIndividual<-max(input_data$Batch) == 1
   
   # How many runs of data are in the input data set?
   run_ids<-unique(input_data$Run)
@@ -142,64 +141,90 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
     for (m in seq_len(nboot)){  
       for (i in seq_len(n_runs)){
         for (j in seq_len(n_runs)){ # For each pair of runs
-            # Obtain two sets of data from the input
-            temp1<-input_data %>%
-              dplyr::filter(Run==run_ids[i])
-            temp2<-input_data %>%
-              dplyr::filter(Run==run_ids[j])
+          # Obtain two sets of data from the input
+          temp1<-input_data %>%
+            dplyr::filter(Run==run_ids[i])
+          temp2<-input_data %>%
+            dplyr::filter(Run==run_ids[j])
+          
+          # Bootstrap both sets
+          n1<-dim(temp1)[1]
+          n2<-dim(temp2)[1]
+          Boot1<-bootOnCounts(n_reps=n1, mydata=temp1, 
+                              batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
+          Boot2<-bootOnCounts(n_reps=n2, mydata=temp2, 
+                              batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
+          
+          # fix any zeros thrown by resample
+          if (sum(is.infinite(Boot1$logCFU))>0){Boot1$logCFU[is.infinite(Boot1$logCFU)]<-0}
+          if (sum(is.infinite(Boot2$logCFU))>0){Boot2$logCFU[is.infinite(Boot2$logCFU)]<-0}
+          
+          # generate stats and carry out tests
+          for (k in seq_along(batch_sizes)){
+            Boot1s<-Boot1 %>%
+              filter(Batch==batch_sizes[k])
+            Boot2s<-Boot2 %>%
+              filter(Batch==batch_sizes[k])
+            Boot.t<-t.test(Boot1s$logCFU, Boot2s$logCFU)
+            Boot.w<-wilcox.test(Boot1s$logCFU, Boot2s$logCFU, exact=FALSE)
+            sw1<-shapiro.test(Boot1s$logCFU)
+            sw2<-shapiro.test(Boot2s$logCFU)
+            # sort data for quantile calculations
+            Boot1s<-sort_by(Boot1s, Boot1s$logCFU)
+            Boot2s<-sort_by(Boot2s, Boot2s$logCFU)
             
-            # Bootstrap both sets
-            Boot1<-bootOnCounts(n_reps=dim(temp1)[1], mydata=temp1, 
-                                batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
-            Boot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2, 
-                                batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
+            # get values for Hogg's calculations#
+            L05_1=mean(Boot1s$FinalCount[1:ceiling(n1/20)])
+            U05_1=mean(Boot1s$FinalCount[-(1:(n1-ceiling(n1/20)))], na.rm=TRUE)
+            L5_1=mean(Boot1s$FinalCount[1:round(n1/2)], na.rm=TRUE)
+            U5_1=mean(Boot1s$FinalCount[-(1:round(n1/2))], na.rm=TRUE)
+            M5_1=mean(Boot1s$FinalCount[ceiling(n1/4):floor(n1*0.75)], na.rm=TRUE)
+            L05_2=mean(Boot2s$FinalCount[1:ceiling(n2/20)])
+            U05_2=mean(Boot2s$FinalCount[-(1:(n2-ceiling(n2/20)))], na.rm=TRUE)
+            L5_2=mean(Boot2s$FinalCount[1:round(n2/2)], na.rm=TRUE)
+            U5_2=mean(Boot2s$FinalCount[-(1:round(n2/2))], na.rm=TRUE)
+            M5_2=mean(Boot2s$FinalCount[ceiling(n2/4):floor(n2*0.75)], na.rm=TRUE)
             
-            # fix any zeros thrown by resample
-            if (sum(is.infinite(Boot1$logCFU))>0){Boot1$logCFU[is.infinite(Boot1$logCFU)]<-0}
-            if (sum(is.infinite(Boot2$logCFU))>0){Boot2$logCFU[is.infinite(Boot2$logCFU)]<-0}
-    
-            # generate stats and carry out tests
-            for (k in seq_along(batch_sizes)){
-              Boot1s<-Boot1 %>%
-                filter(Batch==batch_sizes[k])
-              Boot2s<-Boot2 %>%
-                filter(Batch==batch_sizes[k])
-              Boot.t<-t.test(Boot1s$logCFU, Boot2s$logCFU)
-              Boot.w<-wilcox.test(Boot1s$logCFU, Boot2s$logCFU)
-              sw1<-shapiro.test(Boot1s$logCFU)
-              sw2<-shapiro.test(Boot2s$logCFU)
-              
-              # store the results
-              temp[[idx]]<-tibble(
-                Boot=m,
-                Batch=batch_sizes[k],
-                Run1=i,
-                Run2=j,
-                meanCFU1=mean(Boot1s$FinalCount, na.rm=TRUE), 
-                meanCFU2=mean(Boot2s$FinalCount, na.rm=TRUE),
-                varCFU1=var(Boot1s$FinalCount, na.rm=TRUE), 
-                varCFU2=var(Boot2s$FinalCount, na.rm=TRUE),
-                cvCFU1=sd(Boot1s$FinalCount, na.rm=TRUE)/mean(Boot1s$FinalCount, na.rm=TRUE),
-                cvCFU2=sd(Boot2s$FinalCount, na.rm=TRUE)/mean(Boot2s$FinalCount, na.rm=TRUE),
-                p_sw1=sw1$p.value, 
-                p_sw2=sw2$p.value,
-                p_t=Boot.t$p.value,
-                p_w=Boot.w$p.value
-              )
-              idx<-idx+1
-              } # finish loop over batch sizes
-          }
-        } # finish loops over run pairs
+            
+            # store the results
+            temp[[idx]]<-tibble(
+              Boot=m,
+              Batch=batch_sizes[k],
+              Run1=i,
+              Run2=j,
+              meanCFU1=mean(Boot1s$FinalCount, na.rm=TRUE), 
+              meanCFU2=mean(Boot2s$FinalCount, na.rm=TRUE),
+              varCFU1=var(Boot1s$FinalCount, na.rm=TRUE), 
+              varCFU2=var(Boot2s$FinalCount, na.rm=TRUE),
+              cvCFU1=sd(Boot1s$FinalCount, na.rm=TRUE)/mean(Boot1s$FinalCount, na.rm=TRUE),
+              cvCFU2=sd(Boot2s$FinalCount, na.rm=TRUE)/mean(Boot2s$FinalCount, na.rm=TRUE),
+              Q1_1=(U05_1-M5_1)/(M5_1-L05_1), # Hogg's stats
+              Q2_1=(U05_1-L05_1)/(U5_1-L5_1),
+              Q1_2=(U05_2-M5_2)/(M5_2-L05_2),
+              Q2_2=(U05_2-L05_2)/(U5_2-L5_2),
+              p_sw1=sw1$p.value, 
+              p_sw2=sw2$p.value,
+              p_t=Boot.t$p.value,
+              p_w=Boot.w$p.value
+            )
+            idx<-idx+1
+          } # finish loop over batch sizes
+        }
+      } # finish loops over run pairs
     } # finish loop over bootstraps
   } else {# finish individual conditional
+    ####
+    #    IF ONLY BATCHED DATA ARE AVAILABLE
     # Someplace to put the data generated
     temp<-vector("list", length=n_runs*n_runs*nboot)
     
     # If we have batched data
     # Can't extrapolate to other batch sizes, but we can generate summary stats for the batching in data
     for (m in seq_len(nboot)){  
+      #print(m) #debug
       for (i in seq_len(n_runs)){
         for (j in seq_len(n_runs)){ # For each pair of runs
+          #print(c(i,j)) # debug
           # Obtain two sets of data from the input
           temp1<-input_data %>%
             dplyr::filter(Run==run_ids[i])
@@ -217,10 +242,31 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
           Boot1s<-(correction_constant*temp_count_1*FoldD^temp1$D[idx1])/temp1$Batch
           Boot2s<-(correction_constant*temp_count_2*FoldD^temp2$D[idx2])/temp2$Batch
           
-          Boot.t<-t.test(log10(Boot1s), log10(Boot2s))
-          Boot.w<-wilcox.test(Boot1s, Boot2s)
+          Boot1s_log<-log10(Boot1s)
+          Boot1s_log[!is.finite(Boot1s_log)]<-0
+          Boot2s_log<-log10(Boot2s)
+          Boot2s_log[!is.finite(Boot2s_log)]<-0
+          
+          Boot.t<-t.test(Boot1s_log, Boot2s_log)
+          Boot.w<-wilcox.test(Boot1s, Boot2s, exact=FALSE)
           sw1<-shapiro.test(log10(Boot1s))
           sw2<-shapiro.test(log10(Boot2s))
+          
+          # sort data for quantile calculations
+          Boot1s<-sort(Boot1s)
+          Boot2s<-sort(Boot2s)
+          
+          # get values for Hogg's calculations#
+          L05_1=mean(Boot1s[1:ceiling(n1/20)])
+          U05_1=mean(Boot1s[-(1:(n1-ceiling(n1/20)))], na.rm=TRUE)
+          L5_1=mean(Boot1s[1:round(n1/2)], na.rm=TRUE)
+          U5_1=mean(Boot1s[-(1:round(n1/2))], na.rm=TRUE)
+          M5_1=mean(Boot1s[ceiling(n1/4):floor(n1*0.75)], na.rm=TRUE)
+          L05_2=mean(Boot2s[1:ceiling(n2/20)])
+          U05_2=mean(Boot2s[-(1:(n2-ceiling(n2/20)))], na.rm=TRUE)
+          L5_2=mean(Boot2s[1:round(n2/2)], na.rm=TRUE)
+          U5_2=mean(Boot2s[-(1:round(n2/2))], na.rm=TRUE)
+          M5_2=mean(Boot2s[ceiling(n2/4):floor(n2*0.75)], na.rm=TRUE)
           
           # store the results
           temp[[idx]]<-tibble(
@@ -233,12 +279,18 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
             varCFU2=var(Boot2s, na.rm=TRUE),
             cvCFU1=sd(Boot1s, na.rm=TRUE)/mean(Boot1s, na.rm=TRUE),
             cvCFU2=sd(Boot2s, na.rm=TRUE)/mean(Boot2s, na.rm=TRUE),
+            Q1_1=(U05_1-M5_1)/(M5_1-L05_1), # Hogg's stats
+            Q2_1=(U05_1-L05_1)/(U5_1-L5_1),
+            Q1_2=(U05_2-M5_2)/(M5_2-L05_2),
+            Q2_2=(U05_2-L05_2)/(U5_2-L5_2),
+            # store p-values
             p_sw1=sw1$p.value, 
             p_sw2=sw2$p.value,
             p_t=Boot.t$p.value,
             p_w=Boot.w$p.value
           )
           idx<-idx+1
+          #print(idx) # debug
         }
       } # finish loop over run pairs
     } # finish loop over bootstraps
@@ -248,7 +300,71 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   dataSet<-dplyr::bind_rows(temp)
   return(dataSet)
 }
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+summaryStats<-function(input_data, groups_in=c("Condition", "Run", "Batch"), FoldD=10, correction_constant=20){
+  # This is a short function for returning summary statistics from a data set of counts, 
+  # including the less commonly used Hogg's Q1 and Q2.
+
+  # Takes a data set with columns
+  #   Run (num): Each unique index represents one data set
+  #   Count (num): Number of raw counts associated with each sample
+  #   Batch (int): batch size or weight of each sample.
+  #         Batch=1 is the minimum and indicates individual-based sampling.
+  #   D (num, optional): Fold dilution at which counts were taken
+  #         (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc)
+  #         ***IF D IS NOT GIVEN, FinalCount MUST ALREADY EXIST IN THE DATA SET***
+  #   FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling.
+  #         Will be calculated if not present.
+  # Each row of the data set represents one measurement.
+  # 
+  # Other inputs:
+  #   groups_in (char): Vector of column names to be used in group_by() for summaries
+  #   FoldD (num): Fold dilution in dilution series. Default is 10X dilutions.
+  #   correction_constant (num): a multiplier to correct the fraction of a sample used for one measurement to the original volume
+  #        (e.g. counts from 10 uL spots and an initial volume of 1 mL require correction (1000/10)=100)
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  # First - figure out what is in the data set
+  # Do we need to correct counts for dilution?
+  # Divide by batch size (may be 1) to get per-unit or per-individual numbers
+  my_names<-names(input_data) 
+  if(length(which(my_names=="FinalCount"))==0){  # if FinalCount does not exist
+    if(length(which(my_names=="D"))!=0){ # if we are given a dilution factor
+      input_data$FinalCount<-(correction_constant *(input_data$Count*FoldD^input_data$D))/Batch
+    } else if(length(which(my_names=="D"))==0){
+      stop("Either fold dilution D or FinalCount must be a column in input_data!")
+    }
+      else{
+      input_data$FinalCount<-(correction_constant * input_data$Count)/Batch
+    }
+  } 
+  # now we should have final counts
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # 
+  data_summary<-input_data %>%
+    sort_by(.$FinalCount) %>% # arrange data in increasing order by total count
+    group_by(pick(groups_in)) %>% # depreciated idc
+    summarize(n=n(),
+              meanC=mean(FinalCount, na.rm=TRUE),
+              medianC=median(FinalCount, na.rm=TRUE),
+              varC=var(FinalCount, na.rm=TRUE),
+              L05=mean(FinalCount[1:ceiling(n()/20)], na.rm=TRUE), # get values for Hogg's calculations#
+              U05=mean(FinalCount[-(1:(n()-ceiling(n()/20)))], na.rm=TRUE),
+              L5=mean(FinalCount[1:round(n()/2)], na.rm=TRUE),
+              U5=mean(FinalCount[-(1:round(n()/2))], na.rm=TRUE),
+              M5=mean(FinalCount[ceiling(n()/4):floor(n()*0.75)], na.rm=TRUE)) %>%
+
+    mutate(
+      Q1=(U05-M5)/(M5-L05),
+      Q2=(U05-L05)/(U5-L5))
+  if (min(data_summary$n<20)){print("Warning: Hogg's statistics require n>20")}
+  return(data_summary)
+}
+
+
+###############################################################################
+###############################################################################
 ###############################################################################
 #  DATA ANALYSIS AND FIGURES
 #
@@ -427,7 +543,8 @@ pJointSEBoot
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # same SE bootstrap with zeros set to TOD
-temp0<-dplyr::filter(SaSeCount, Condition=="SE")
+temp0<-SaSeCountAll %>%
+  dplyr::filter(Condition=="SE" & Batch==1)
 idx<-which(temp0$Count==0)
 temp0[idx,] # quick look
 temp0$Count[idx]<-1
@@ -479,7 +596,8 @@ pJointSEBoot_nozeros
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # and with extra zeros
 # implemented as higher TOD, call it 10^3
-temp3<-dplyr::filter(SaSeCount, Condition=="SE")
+temp3<-SaSeCountAll %>%
+  dplyr::filter(Condition=="SE" & Batch==1)
 idx<-which(temp3$logCFU<3)
 temp3$Count[idx]<-0
 temp3$D[idx]<-0
@@ -557,7 +675,6 @@ median(BatchDigests$CFU[BatchDigests$Species=="SA" & BatchDigests$Batch==1 ])
 # and the single worm data from NRRL1 evolution paper (10.1093/femsec/fiac115)
 # so we can describe run to run variation
 # just need the total counts for this
-
 
 WormReps<-read_csv("WormCFUReplicates.csv")
 names(WormReps)
