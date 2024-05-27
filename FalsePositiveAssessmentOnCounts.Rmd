@@ -3,20 +3,6 @@ title: "False Positive Assessment On Counts"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
-
-```{r}
-plot(cars)
-```
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
-
 # Purpose
 This notebook accompanies the code in the corresponding manuscript "Sample pooling inflates error rates in between-sample comparisons: an empirical investigation of the statistical properties of count-based data". The code contained here is intended to allow end users to interrogate their own count-based data using the approaches in that manuscript.
 
@@ -111,9 +97,8 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   #   Count (num): Number of raw counts associated with each sample
   #   Batch (int): batch size or weight of each sample.
   #         Batch=1 is the minimum and indicates individual-based sampling.
-  #   D (num, optional): Fold dilution at which counts were taken
+  #   D (num): Fold dilution at which counts were taken
   #         (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc)
-  #         ***IF D IS NOT GIVEN, FinalCount MUST ALREADY EXIST IN THE DATA SET***
   #   FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling.
   #         Will be calculated if not present.
   # Each row of the data set represents one measurement.
@@ -136,7 +121,7 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
     if(length(which(my_names=="D"))!=0){ # if we are given a dilution factor
       input_data$FinalCount<-(correction_constant *(input_data$Count*FoldD^input_data$D))/Batch
     } else if(length(which(my_names=="D"))==0){
-      stop("Either fold dilution D or FinalCount must be a column in input_data!")
+      stop("Fold dilution D must be a column in input_data!")
     }
       else{
       input_data$FinalCount<-(correction_constant * input_data$Count)/Batch
@@ -145,7 +130,7 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   # now we should have final counts
   
   # Are data individual or batch-based?
-  isIndividual<-max(input_data$Batch == 1)
+  isIndividual<-max(input_data$Batch) == 1
   
   # How many runs of data are in the input data set?
   run_ids<-unique(input_data$Run)
@@ -171,11 +156,13 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
               dplyr::filter(Run==run_ids[j])
             
             # Bootstrap both sets
-            Boot1<-bootOnCounts(n_reps=dim(temp1)[1], mydata=temp1, 
+            n1<-dim(temp1)[1]
+            n2<-dim(temp2)[1]
+            Boot1<-bootOnCounts(n_reps=n1, mydata=temp1, 
                                 batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
-            Boot2<-bootOnCounts(n_reps=dim(temp2)[1], mydata=temp2, 
+            Boot2<-bootOnCounts(n_reps=n2, mydata=temp2, 
                                 batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
-            
+                      
             # fix any zeros thrown by resample
             if (sum(is.infinite(Boot1$logCFU))>0){Boot1$logCFU[is.infinite(Boot1$logCFU)]<-0}
             if (sum(is.infinite(Boot2$logCFU))>0){Boot2$logCFU[is.infinite(Boot2$logCFU)]<-0}
@@ -190,6 +177,22 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
               Boot.w<-wilcox.test(Boot1s$logCFU, Boot2s$logCFU, exact=FALSE)
               sw1<-shapiro.test(Boot1s$logCFU)
               sw2<-shapiro.test(Boot2s$logCFU)
+              # sort data for quantile calculations
+              Boot1s<-sort_by(Boot1s, Boot1s$logCFU)
+              Boot2s<-sort_by(Boot2s, Boot2s$logCFU)
+              
+            # get values for Hogg's calculations#
+              L05_1=mean(Boot1s$FinalCount[1:ceiling(n1/20)])
+              U05_1=mean(Boot1s$FinalCount[-(1:(n1-ceiling(n1/20)))], na.rm=TRUE)
+              L5_1=mean(Boot1s$FinalCount[1:round(n1/2)], na.rm=TRUE)
+              U5_1=mean(Boot1s$FinalCount[-(1:round(n1/2))], na.rm=TRUE)
+              M5_1=mean(Boot1s$FinalCount[ceiling(n1/4):floor(n1*0.75)], na.rm=TRUE)
+              L05_2=mean(Boot2s$FinalCount[1:ceiling(n2/20)])
+              U05_2=mean(Boot2s$FinalCount[-(1:(n2-ceiling(n2/20)))], na.rm=TRUE)
+              L5_2=mean(Boot2s$FinalCount[1:round(n2/2)], na.rm=TRUE)
+              U5_2=mean(Boot2s$FinalCount[-(1:round(n2/2))], na.rm=TRUE)
+              M5_2=mean(Boot2s$FinalCount[ceiling(n2/4):floor(n2*0.75)], na.rm=TRUE)
+
               
               # store the results
               temp[[idx]]<-tibble(
@@ -203,6 +206,10 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
                 varCFU2=var(Boot2s$FinalCount, na.rm=TRUE),
                 cvCFU1=sd(Boot1s$FinalCount, na.rm=TRUE)/mean(Boot1s$FinalCount, na.rm=TRUE),
                 cvCFU2=sd(Boot2s$FinalCount, na.rm=TRUE)/mean(Boot2s$FinalCount, na.rm=TRUE),
+                Q1_1=(U05_1-M5_1)/(M5_1-L05_1), # Hogg's stats
+                Q2_1=(U05_1-L05_1)/(U5_1-L5_1),
+                Q1_2=(U05_2-M5_2)/(M5_2-L05_2),
+                Q2_2=(U05_2-L05_2)/(U5_2-L5_2),
                 p_sw1=sw1$p.value, 
                 p_sw2=sw2$p.value,
                 p_t=Boot.t$p.value,
@@ -214,14 +221,18 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
         } # finish loops over run pairs
     } # finish loop over bootstraps
   } else {# finish individual conditional
+    ####
+    #    IF ONLY BATCHED DATA ARE AVAILABLE
     # Someplace to put the data generated
     temp<-vector("list", length=n_runs*n_runs*nboot)
     
     # If we have batched data
     # Can't extrapolate to other batch sizes, but we can generate summary stats for the batching in data
     for (m in seq_len(nboot)){  
+      #print(m) #debug
       for (i in seq_len(n_runs)){
         for (j in seq_len(n_runs)){ # For each pair of runs
+          #print(c(i,j)) # debug
           # Obtain two sets of data from the input
           temp1<-input_data %>%
             dplyr::filter(Run==run_ids[i])
@@ -239,8 +250,13 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
           Boot1s<-(correction_constant*temp_count_1*FoldD^temp1$D[idx1])/temp1$Batch
           Boot2s<-(correction_constant*temp_count_2*FoldD^temp2$D[idx2])/temp2$Batch
           
-          Boot.t<-t.test(log10(Boot1s), log10(Boot2s))
-          Boot.w<-wilcox.test(Boot1s, Boot2s)
+          Boot1s_log<-log10(Boot1s)
+          Boot1s_log[!is.finite(Boot1s_log)]<-0
+          Boot2s_log<-log10(Boot2s)
+          Boot2s_log[!is.finite(Boot2s_log)]<-0
+          
+          Boot.t<-t.test(Boot1s_log, Boot2s_log)
+          Boot.w<-wilcox.test(Boot1s, Boot2s, exact=FALSE)
           sw1<-shapiro.test(log10(Boot1s))
           sw2<-shapiro.test(log10(Boot2s))
           
@@ -282,6 +298,7 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
             p_w=Boot.w$p.value
           )
           idx<-idx+1
+          #print(idx) # debug
         }
       } # finish loop over run pairs
     } # finish loop over bootstraps
@@ -357,7 +374,7 @@ summaryStats<-function(input_data, groups_in=c("Condition", "Run", "Batch"), Fol
 
 
 
-# If You Have Individual-Based Data
+# Simulation-Based Thresholding: If You Have Individual-Based Data
 To assess run to run variation and false positive rates from individual-based data, you will need data from at least two independent runs (not internal/technical replicates) of the same experiment. Ideally each run will contain a sufficient number of data points to allow reasonable bootstrapping; for worms, we strongly recommend a minimum sample size of 18 individuals.
 
 If individual-based data are available, it is possible to use bootstrapping to empirically assess the probable effects of biological averaging. The workflow here will recapitulate the results in Figure 1 of the manuscript; users should replace our data (bacterial load for Salmonella enterica in N2 worms) with their own data set.
@@ -376,7 +393,7 @@ The bootstrapping functions expect count-based data with a particular structure.
   * Run (num): Each unique index represents one data set
   * Count (num): Number of raw counts associated with each sample
   * Batch (int): batch size or weight of each sample. Batch=1 is the minimum and indicates individual-based sampling.
-  * D (num, optional): Fold dilution at which counts were taken (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc) ***IF D IS NOT GIVEN, FinalCount MUST ALREADY EXIST IN THE DATA SET***
+  * D (num): Fold dilution at which counts were taken (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc) ***NEEDED FOR BOOTSTRAPPING ON RAW COUNTS***
   * FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling. (This will be calculated if not present, if D is provided. Otherwise an error is returned.)
   
 Let's make sure the data structure is OK before proceeding.
@@ -401,7 +418,8 @@ input_data %>%
 ```
 We can also generate summary statistics for the data:
 ```{r}
-summaryStats(input_data = input_data)
+myStats<-summaryStats(input_data = input_data)
+myStats
 ```
 
 
@@ -430,8 +448,8 @@ jointBoot %>%
 	ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
 	geom_violin(fill=NA) + 
-  geom_hline(yintercept=log10(20), color="black", lty="dashed")+
-	ylim(-0.1,6.2) + 
+  geom_hline(yintercept=log10(20), color="black", lty="dashed")+ # TOD for our plating data - replace with your own
+	ylim(-0.1,6.2) +   # Reasonable limits for CFU/worm in log10 scale - replace with your own
   theme_classic() +
   scale_color_viridis_d(begin=0.3, end=0.8) +
 	theme(
@@ -448,7 +466,7 @@ jointBoot %>%
   facet_wrap(vars(Batch), ncol=5)+
   labs(title="Simulated Batch Data", 
        y=expression(log[10]("Total Count")), x="Run")+
-  stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+
+  stat_compare_means(method="t.test", label.y = 6.2, size=3.2)+   # label positions may need adjustment for your data
   stat_compare_means(method="wilcox.test", label.y=5.9, size=3.2)
 ```
 
@@ -512,12 +530,335 @@ BootCombinations_testsummary %>%
 
 Having estimated the effects of batching on error rates in pairwise comparisons, we next want to estimate the magnitude of run-to-run variation. This will determine whether thresholding comparisons based on a minimum empirical effect size will correct false-positive inflation due to batching. 
 
-We can do this empirically using the measures of run-to-run distance from Figure 2:
+We can do this empirically using the measures of run-to-run distance from Figure 2. First calculate these distances:
 ```{r}
+BootCombinations <- BootCombinations %>%
+  mutate(
+    		meanCFUdist=abs(meanCFU1-meanCFU2)/(meanCFU1+meanCFU2),
+    		meanCFUCohenD=abs(meanCFU1-meanCFU2)/sqrt((varCFU1+varCFU2)/2),
+    		cvdist=abs(cvCFU1-cvCFU2),
+    		Q1dist=abs(Q1_1-Q1_2),
+    		Q2dist=abs(Q2_1-Q2_2)
+  )
+```
 
+And plot out:
+```{r}
+my.labs<-c("Mean CFU", "Cohen's D", "CV", "Q1", "Q2")
+names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist","Q2dist")
+BootCombinations %>%
+  pivot_longer(., cols = c(meanCFUdist, meanCFUCohenD, cvdist, Q1dist, Q2dist), 
+               names_to = "Var", values_to = "Value") %>%
+  mutate(Var=factor(Var, 
+                    levels=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist", "Q2dist")) ) %>%
+  ggplot(aes(x=factor(Batch), y=Value, color=Var))+
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_boxplot(fill=NA) +	
+  theme_classic() + 
+  scale_color_viridis_d(option="magma", begin=0.3, end=0.7)+
+  theme( 
+    axis.title.x = element_blank(), 
+    axis.text.x = element_text(size=xTextSize-1),
+    axis.title.y = element_text(size=xTextSize), 
+    axis.text.y = element_text(size=xTextSize-1), 
+    legend.position="none", 
+      plot.title=element_text(hjust=0.5, size=xTextSize)) +
+  labs(title="", y="Distance between pairs", x="Batch Size")+
+  facet_wrap(vars(Var), scales="free", nrow=1, labeller=labeller(Var=my.labs))
+```
 
+Note that while the distribution of rescaled distances between means is relatively unaffected by batching except in the tails, Cohen's D (variance-normalized mean distance) and distances in the coefficient of variation (CV) and in Q1 (quantile-based measure of skewness) are strongly affected by batching, consistent with the observed increase in false-positive pairwise comparisons.
+
+We can get exact numbers from the quantiles of the distribution of mean distances:
+```{r}
+BootCombinations %>%
+  group_by(Batch) %>%
+  summarize(q75MeanDist=quantile(meanCFUdist, probs=0.75),
+            q90MeanDist=quantile(meanCFUdist, probs=0.9))
+```
+
+The distribution of mean distances suggests a cutoff of ~0.35, below which we will not consider any statistically significant comparisons to be "real". If we impose this cutoff, we find that implementing this cutoff dramatically reduces - and for some pairs entirely eliminates - false positive rate inflation due to batching.
+```{r}
+# how many comparisons are significant for each test?
+meandiff_cutoff<-0.35
+
+BootCombinations_cutoff<-BootCombinations %>%
+  mutate(isSig_tc=as.integer(as.logical(p_t<0.05 & meanCFUdist>meandiff_cutoff)), # label significant t-tests
+         isSig_wc=as.integer(as.logical(p_w<0.05 & meanCFUdist>meandiff_cutoff)) # and significant Wilcoxon tests
+         ) # and label each result with the pairs of runs compared 
+glimpse(BootCombinations_cutoff)
+
+# Summarize to get fraction of bootstrap replicates where each test is significant
+# for each pair of runs at each batch size
+BootCombinations_cutoff_testsummary<-BootCombinations_cutoff %>%
+  group_by(RunPair, Batch) %>%
+  summarize(countSigT=sum(isSig_tc),
+            countSigW=sum(isSig_wc),
+            n=n()) %>%
+  mutate(fracSigT=countSigT/n,
+         fracSigW=countSigW/n) %>%
+  ungroup() %>%
+  dplyr::select(RunPair, Batch, fracSigT, fracSigW) %>%
+  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+               names_prefix = "fracSig", values_to = "fracSig")
+
+# Remove redundant pairs ('Run 1 v Run 3' is the same as 'Run3 v Run 1')
+# This list works if you have three runs -
+# change your list accordingly
+pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
+            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
+# plot
+BootCombinations_cutoff_testsummary %>%
+  dplyr::filter(RunPair %in% pair_list) %>%
+  ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  ylim(0,1)+
+  scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Pairwise Tests, Thresholded")+
+  facet_wrap(~RunPair)
 ```
 
 
+# Simulation-Based Thresholding: If You Do Not Have Individual-Based Data
 
-# If You Do Not Have Individual-Based Data
+To assess run to run variation and false positive rates from batch-based data, you will again need data from at least two independent runs (not internal/technical replicates) of the same experiment. Ideally each run will contain a sufficient number of data points to allow reasonable bootstrapping; for worms, we strongly recommend a minimum sample size of 18 individuals.
+
+As individual-based data are unavailable, we cannot infer the distributions of individuals within each sample, and we therefore cannot directly simulate the effects of changing batch size. However, as simulations from individual-based data indicate that the distribution of rescaled mean distances should depend only weakly on batching, we can use that distribution to obtain a threshold value.
+
+As the data set used in this manuscript does not contain batch-based data with the correct structure, we will instead demonstrate this workflow with simulated data. DO NOT RUN THIS BLOCK IF USING REAL DATA - FOR ILLUSTRATION ONLY.
+```{r}
+SE_data<-SaSeCountAll %>%
+  dplyr::filter(Condition=="SE" & Batch==1)
+# Pull out runs from the data set
+temp1<-SE_data %>%
+  dplyr::filter(Run=="1")
+temp2<-SE_data %>%
+  dplyr::filter(Run=="2")
+temp3<-SE_data %>%
+  dplyr::filter(Run=="3")
+
+# For each run, generate bootstrapped data
+# Here we are allowing defaults apart from batch sizes (only need one size)
+Boot1<-bootOnCounts(n_reps=dim(temp1)[1], batch_sizes=5, mydata=temp1)
+Boot2<-bootOnCounts(n_reps=dim(temp2)[1], batch_sizes=5, mydata=temp2)
+Boot3<-bootOnCounts(n_reps=dim(temp3)[1], batch_sizes=5, mydata=temp3)
+
+# restore the dilutions from plating data
+Boot1$D<-temp1$D
+Boot2$D<-temp2$D
+Boot3$D<-temp3$D
+
+# Name the runs something useful
+Boot1$Run<-as.factor("Run1")
+Boot2$Run<-as.factor("Run2")
+Boot3$Run<-as.factor("Run3")
+
+# combine into a single object for easy plotting
+input_data<-rbind(Boot1, Boot2, Boot3) 
+
+correction_constant<-20
+# and reverse FinalCount to get raw counts
+input_data$Count<-round(10^(log10(input_data$FinalCount/correction_constant) -input_data$D))
+```
+
+If you are using your own data, read that in instead.
+```{r}
+#input_data<-read_xlsx("input_data.xlsx")  # replace with your data file
+```
+
+The bootstrapping functions expect count-based data with a particular structure. Each row of the data set represents one measurement, and the data should have columns: 
+  * Run (num): Each unique index represents one data set
+  * Count (num): Number of raw counts associated with each sample
+  * Batch (int): batch size or weight of each sample. Batch=1 is the minimum and indicates individual-based sampling.
+  * D (num): Fold dilution at which counts were taken (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc) 
+  * FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling. (This will be calculated if not present, if D is provided. Otherwise an error is returned.)
+  
+Let's make sure the data structure is OK before proceeding.
+```{r}
+glimpse(input_data) # take a quick look at the data object contents and confirm column names are OK
+```
+
+And as always it is a good idea to plot out to make sure the data look ok:
+```{r}
+# easy plotting
+input_data %>%
+	ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
+	geom_jitter(shape=16, position=position_jitter(0.05)) +
+	geom_violin(fill=NA) + 
+  geom_hline(yintercept=log10(20), color="black", lty="dashed")+ # TOD for our plating data - replace with your own
+	ylim(-0.1,6.2) + 
+  theme_classic() +
+  scale_color_viridis_d(begin=0.3, end=0.8) +
+	theme(
+	  text=element_text(size=xTextSize), 
+	  axis.title.x = element_blank(),
+	  axis.text.x = element_blank(),
+	  axis.text.y = element_text(size=xTextSize-1),
+	  axis.title.y = element_text(size=xTextSize),
+	  plot.title=element_text(hjust=0.5,size=xTextSize),
+	  #legend.position.inside=c(0.9,0.3),
+	  legend.title = element_blank(),
+	  legend.text = element_text(size=xTextSize-1)
+	  )+
+  labs(title="Batch Data", 
+       y=expression(log[10]("Total Count")), x="Run")
+```
+
+The function used for bootstrapping individual-based data in the previous section will also bootstrap batch-based data from raw counts and dilution series information, again assuming sampling noise on counts.
+```{r}
+# Carries out nboot simulations and stores
+BootCombinations_batch<-bootOnCountsStats(input_data=input_data, nboot=1000, 
+                                      FoldD=10, correction_constant=20)
+# If you want more human-interpretable run IDs, they must be added after the bootstrap
+BootCombinations_batch$Run1ID<-paste("Run", BootCombinations_batch5$Run1, sep=" ")
+BootCombinations_batch$Run2ID<-paste("Run", BootCombinations_batch5$Run2, sep=" ")
+
+# look at contents
+glimpse(BootCombinations_batch)
+```
+We can see the fraction of significant tests without adjustment for threshold. As before, comparisons of each data set to itself should always have false positive rates close to the declared value alpha.
+```{r}
+# how many comparisons are significant for each test?
+BootCombinations_batch<-BootCombinations_batch %>%
+  mutate(isSig_t=as.integer(as.logical(p_t<0.05)), # label significant t-tests
+         isSig_w=as.integer(as.logical(p_w<0.05)), # and significant Wilcoxon tests
+         RunPair=paste(Run1ID, "v", Run2ID, sep=" ")) # and label each result with the pairs of runs compared
+
+# Summarize to get fraction of bootstrap replicates where each test is significant
+# for each pair of runs at each batch size
+BootCombinations_batch_testsummary<-BootCombinations_batch %>%
+  group_by(RunPair) %>%
+  summarize(countSigT=sum(isSig_t),
+            countSigW=sum(isSig_w),
+            n=n()) %>%
+  mutate(fracSigT=countSigT/n,
+         fracSigW=countSigW/n) %>%
+  ungroup() %>%
+  dplyr::select(RunPair, fracSigT, fracSigW) %>%
+  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+               names_prefix = "fracSig", values_to = "fracSig")
+
+# Remove redundant pairs ('Run 1 v Run 3' is the same as 'Run3 v Run 1')
+# This list works if you have three runs -
+# change your list accordingly
+pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
+            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
+# plot
+BootCombinations_batch_testsummary %>%
+  dplyr::filter(RunPair %in% pair_list) %>%
+  ggplot(aes(x=factor(RunPair), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  ylim(0,1)+
+  scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)
+  )+
+  labs(x="", y="Fraction Significant", fill="Test",
+       title="Pairwise Tests")
+```
+
+As with the individual-based data bootstraps, we can empirically set thresholds using the measures of run-to-run distance from Figure 2. First calculate these distances:
+```{r}
+BootCombinations_batch <- BootCombinations_batch %>%
+  mutate(
+    		meanCFUdist=abs(meanCFU1-meanCFU2)/(meanCFU1+meanCFU2),
+    		meanCFUCohenD=abs(meanCFU1-meanCFU2)/sqrt((varCFU1+varCFU2)/2),
+    		cvdist=abs(cvCFU1-cvCFU2),
+    		Q1dist=abs(Q1_1-Q1_2),
+    		Q2dist=abs(Q2_1-Q2_2)
+  )
+```
+
+And plot out:
+```{r}
+my.labs<-c("Mean CFU", "Cohen's D", "CV", "Q1", "Q2")
+names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist","Q2dist")
+BootCombinations_batch %>%
+  pivot_longer(., cols = c(meanCFUdist, meanCFUCohenD, cvdist, Q1dist, Q2dist), 
+               names_to = "Var", values_to = "Value") %>%
+  mutate(Var=factor(Var, 
+                    levels=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist", "Q2dist")) ) %>%
+  ggplot(aes(x=factor(RunPair), y=Value, color=Var))+
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  geom_boxplot(fill=NA) +	
+  theme_classic() + 
+  scale_color_viridis_d(option="magma", begin=0.3, end=0.7)+
+  theme( 
+    axis.text.x = element_text(angle = 90, vjust = 1, hjust=1),
+    legend.position="none", 
+      plot.title=element_text(hjust=0.5)) +
+  labs(title="", y="Distance between pairs", x="Batch Size")+
+  facet_wrap(vars(Var), scales="free", nrow=1, labeller=labeller(Var=my.labs))
+```
+
+Note that while the distribution of rescaled distances between means is relatively unaffected by batching except in the tails, Cohen's D (variance-normalized mean distance) and distances in the coefficient of variation (CV) and in Q1 (quantile-based measure of skewness) are strongly affected by batching, consistent with the observed increase in false-positive pairwise comparisons.
+
+We can get exact numbers from the quantiles of the distribution of mean distances:
+```{r}
+BootCombinations_batch %>%
+  group_by(RunPair) %>%
+  summarize(q75MeanDist=quantile(meanCFUdist, probs=0.75),
+            q90MeanDist=quantile(meanCFUdist, probs=0.9))
+```
+
+The distribution of mean distances suggests a cutoff of ~0.4, below which we will not consider any statistically significant comparisons to be "real". If we impose this cutoff, we find that implementing this cutoff dramatically reduces - and for some pairs entirely eliminates - false positive rate inflation due to batching.
+```{r}
+# how many comparisons are significant for each test?
+meandiff_cutoff<-0.4
+
+BootCombinations_batch_cutoff<-BootCombinations_batch %>%
+  mutate(isSig_tc=as.integer(as.logical(p_t<0.05 & meanCFUdist>meandiff_cutoff)), # label significant t-tests
+         isSig_wc=as.integer(as.logical(p_w<0.05 & meanCFUdist>meandiff_cutoff)) # and significant Wilcoxon tests
+         ) # and label each result with the pairs of runs compared 
+glimpse(BootCombinations_batch_cutoff)
+
+# Summarize to get fraction of bootstrap replicates where each test is significant
+# for each pair of runs at each batch size
+BootCombinations_batch_cutoff_testsummary<-BootCombinations_batch_cutoff %>%
+  group_by(RunPair) %>%
+  summarize(countSigT=sum(isSig_tc),
+            countSigW=sum(isSig_wc),
+            n=n()) %>%
+  mutate(fracSigT=countSigT/n,
+         fracSigW=countSigW/n) %>%
+  ungroup() %>%
+  dplyr::select(RunPair,fracSigT, fracSigW) %>%
+  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+               names_prefix = "fracSig", values_to = "fracSig")
+
+# Remove redundant pairs ('Run 1 v Run 3' is the same as 'Run3 v Run 1')
+# This list works if you have three runs -
+# change your list accordingly
+pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
+            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
+# plot
+BootCombinations_batch_cutoff_testsummary %>%
+  dplyr::filter(RunPair %in% pair_list) %>%
+  ggplot(aes(x=factor(RunPair), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  ylim(0,1)+
+  scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5),
+    axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)
+  )+
+  labs(x="", y="Fraction Significant", fill="Test",
+       title="Pairwise Tests, Thresholded")
+```
+
+
+# Comparing Within- and Between-Group Variance From Uniformly Weighted Factorial Experimental Data
