@@ -16,8 +16,8 @@ pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, read
 # S. enterica colonization raw data
 # Bootstrap many times, over all three runs
 
-input_data<-SaSeCount %>%
-  dplyr::filter(Condition=="SE")
+input_data<-SaSeCountAll %>%
+  dplyr::filter(Condition=="SE" & Batch==1)
 SeBootCombinations<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
                                       FoldD=10, correction_constant=20)
 glimpse(SeBootCombinations)
@@ -177,7 +177,8 @@ ggsave("FigS1_SeSingleWormBootStats.png", width=12, height=7, units="in", dpi=30
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Same bootstrap with zeros removed
-temp0<-dplyr::filter(SaSeCount, Condition=="SE")
+temp0<-SaSeCountAll %>%
+  dplyr::filter(Condition=="SE" & Batch==1)
 idx<-which(temp0$Count==0)
 temp0[idx,] # quick look
 temp0$Count[idx]<-1
@@ -266,7 +267,8 @@ pSeBootCombinations0_stats_cv
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Same bootstrap with zeros enriched
 # implemented as higher TOD, call it 10^3
-temp3<-dplyr::filter(SaSeCount, Condition=="SE")
+temp3<-SaSeCountAll %>%
+  dplyr::filter(Condition=="SE" & Batch==1)
 idx<-which(temp3$logCFU<3)
 temp3$Count[idx]<-0
 temp3$D[idx]<-0
@@ -419,6 +421,7 @@ pSeBootCombinations_testsummary +
   plot_annotation(tag_levels = 'A') &
   theme(legend.position='bottom')
 ggsave("FigS2_SeZeros.png", height=9, width=14, units="in", dpi=300)
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
