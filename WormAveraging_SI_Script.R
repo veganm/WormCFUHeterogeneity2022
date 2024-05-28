@@ -792,41 +792,39 @@ wormSimBetaRand.1.5 %>%
   summarize(frac.t=length(which(p.t<0.05))/n(),
             frac.w=length(which(p.w<0.05))/n())
 
-wormSimBetaRand.1.5<-wormSimBatchBetaCompare(1,5,1,5,1000,24,100000, 0.1)
-wormSimBetaRand.p5.2p5<-wormSimBatchBetaCompare(0.5,2.5,0.5,2.5,1000,24,100000, 0.1)
-wormSimBetaRand.5.1<-wormSimBatchBetaCompare(5,1,5,1,1000,24,100000, 0.1)
-wormSimBetaRand.2p5.p5<-wormSimBatchBetaCompare(2.5,0.5,2.5,0.5,1000,24,100000, 0.1)
-wormSimBetaRand.5.5<-wormSimBatchBetaCompare(5,5,5,5,1000,24,100000, 0.1)
-wormSimBetaRand.2p5.2p5<-wormSimBatchBetaCompare(2.5,2.5,2.5,2.5,1000,24,100000, 0.1)
-wormSimBetaRand.1.1<-wormSimBatchBetaCompare(1,1,1,1,1000,24,100000, 0.1)
+#wormSimBetaRand.1.5<-wormSimBatchBetaCompare(1,5,1,5,1000,24,100000, 0.1)
+#wormSimBetaRand.p5.2p5<-wormSimBatchBetaCompare(0.5,2.5,0.5,2.5,1000,24,100000, 0.1)
+wormSimBetaRand.p5.2p5<-wormSimBatchBetaCompare(a1=0.5, b1=2.5, a2=0.5, b2=2.5, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
 
-# calculate CV; include the distances
-#wormSimBetaRand.1.5$meandist<-abs(wormSimBetaRand.1.5$meanA-wormSimBetaRand.1.5$meanB)/(wormSimBetaRand.1.5$meanA+wormSimBetaRand.1.5$meanB)
-#wormSimBetaRand.1.5$cvA<-sqrt(wormSimBetaRand.1.5$varA)/wormSimBetaRand.1.5$meanA
-#wormSimBetaRand.1.5$cvB<-sqrt(wormSimBetaRand.1.5$varB)/wormSimBetaRand.1.5$meanB
-#wormSimBetaRand.1.5$cvdist<-abs(wormSimBetaRand.1.5$cvA-wormSimBetaRand.1.5$cvB)
-#wormSimBetaRand.1.5$skewdist<-abs(wormSimBetaRand.1.5$skewA-wormSimBetaRand.1.5$skewB)
-#wormSimBetaRand.1.5$kurtdist<-abs(wormSimBetaRand.1.5$kurtA-wormSimBetaRand.1.5$kurtB)
+#wormSimBetaRand.5.1<-wormSimBatchBetaCompare(5,1,5,1,1000,24,100000, 0.1)
+wormSimBetaRand.5.1<-wormSimBatchBetaCompare(a1=5, b1=1, a2=5, b2=1, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
+
+#wormSimBetaRand.2p5.p5<-wormSimBatchBetaCompare(2.5,0.5,2.5,0.5,1000,24,100000, 0.1)
+wormSimBetaRand.2p5.p5<-wormSimBatchBetaCompare(a1=2.5, b1=0.5, a2=2.5, b2=0.5, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
+
+#wormSimBetaRand.5.5<-wormSimBatchBetaCompare(5,5,5,5,1000,24,100000, 0.1)
+wormSimBetaRand.5.1<-wormSimBatchBetaCompare(a1=5, b1=5, a2=5, b2=5, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
+
+#wormSimBetaRand.2p5.2p5<-wormSimBatchBetaCompare(2.5,2.5,2.5,2.5,1000,24,100000, 0.1)
+wormSimBetaRand.2p5.2p5<-wormSimBatchBetaCompare(a1=2.5, b1=2.5, a2=2.5, b2=2.5, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
+
+#wormSimBetaRand.1.1<-wormSimBatchBetaCompare(1,1,1,1,1000,24,100000, 0.1)
+wormSimBetaRand.1.1<-wormSimBatchBetaCompare(a1=1, b1=1, a2=1, b2=1, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
+
 
 # Flip the data set around so it can get factor-gridded
-wormSimBetaRand.1.5_A<-as_tibble(wormSimBetaRand.1.5) %>%
-  select(batch, meanA, cvA, skewA, kurtA) %>%
-  rename(mean=meanA,
-         cv=cvA,
-         skew=skewA,
-         kurt=kurtA)
-wormSimBetaRand.1.5_A$set<-"A"
-
-wormSimBetaRand.1.5_B<-as_tibble(wormSimBetaRand.1.5) %>%
-  select(batch, meanB, cvB, skewB, kurtB) %>%
-  rename(mean=meanB,
-         cv=cvB,
-         skew=skewB,
-         kurt=kurtB)
-wormSimBetaRand.1.5_B$set<-"B"
+wormSimBetaRand.1.5.long<-wormSimBetaRand.1.5 %>%
+  dplyr::select(Run:kurt_B) %>% # select only summary stats for data sets
+  pivot_longer(cols=mean_A:kurt_B, names_to=c("stat", "set"), values_to = "value", names_pattern='([a-z]+)_([A-B])')
+wormSimBetaRand.1.5.long<-wormSimBetaRand.1.5.long %>%
+  mutate(comparison=wormSimBetaRand.1.5$comparison[1],
+         dist=wormSimBetaRand.1.5$dist_A[1])
+idx<-which(wormSimBetaRand.1.5.long$set=="B")
+wormSimBetaRand.1.5.long$dist[idx]<-wormSimBetaRand.1.5$dist_B[1]
+glimpse(wormSimBetaRand.1.5.long)
 
 wormSimBetaRand.1.5_dist<-as_tibble(wormSimBetaRand.1.5) %>%
-  select(batch, meandist, cvdist, skewdist, kurtdist) %>%
+  select(Run, batch, n, meandist, cvdist, skewdist, kurtdist, comparison) %>%
   rename(mean=meandist,
          cv=cvdist,
          skew=skewdist,
@@ -834,25 +832,27 @@ wormSimBetaRand.1.5_dist<-as_tibble(wormSimBetaRand.1.5) %>%
 wormSimBetaRand.1.5_dist$set<-"Distance"
 
 # and combine
-wormSimBetaRand.1.5_long<-rbind(wormSimBetaRand.1.5_A, wormSimBetaRand.1.5_B)
-wormSimBetaRand.1.5_long$logMean<-log10(wormSimBetaRand.1.5_long$mean)
+#wormSimBetaRand.1.5_long<-rbind(wormSimBetaRand.1.5_A, wormSimBetaRand.1.5_B)
+#wormSimBetaRand.1.5.long$logValue<-log10(wormSimBetaRand.1.5.long$value)
 
 #plot out
 pSimBatchBetaRand.1.5.AB<-wormSimBetaRand.1.5_long %>%
-  dplyr::relocate(set) %>%
-  dplyr::relocate(logMean, .after=mean) %>%
-  dplyr::select(-mean) %>%
-  rename(average=logMean) %>%
-  pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
-  ggplot(aes(x=batch, y=value, color=batch))+
+  #dplyr::relocate(set) %>%
+  #dplyr::relocate(logMean, .after=mean) %>%
+  #dplyr::select(-mean) %>%
+  #rename(average=logMean) %>%
+  #pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
+  ggplot(aes(x=factor(batch), y=value, color=factor(batch)))+
   geom_violin(fill=NA) + theme_classic() + 
   scale_color_viridis_d(begin=0.3, end=0.8) +  
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   theme(text=element_text(size=14), 
-        axis.title.x = element_blank(),  legend.position="none",
+        axis.title.x = element_blank(),  
+        legend.position="none",
         plot.title=element_text(hjust=0.5, size=14)) + 
   #  labs(title=paste("\u03b2","(1,5) A", sep=""), y="Mean")
-  facet_grid(rows=vars(moment), cols=vars(set), scales="free_y")
+  facet_grid(rows=vars(stat), cols=vars(set), scales="free_y")
+pSimBatchBetaRand.1.5.AB
 
 pSimBatchBetaRand.1.5.dist<-wormSimBetaRand.1.5_dist %>%
   dplyr::relocate(set) %>%
