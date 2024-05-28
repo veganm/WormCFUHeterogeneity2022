@@ -1,5 +1,6 @@
-wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, prange=0.1, sameParams=FALSE, returnMEANS=TRUE){
-  #Function that generates beta-distributed "worm CFU counts" with triplicate days
+wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=c(1,5,10,20,50),
+                            maxCFU=1e5, prange=0.1, sameParams=FALSE){
+  #Function that generates beta-distributed "worm CFU counts" with replicate days (default reps=3)
   #a and b are the parameters of the beta distribution
   #maxCFU is the scaling factor used to turn beta values to CFUs
   #nWorms is the total number of worms that we have available for each condition per replicate (>=12)
@@ -7,193 +8,127 @@ wormSimBatchBeta3<-function(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, pran
   #reps is the number of independent replicates to be performed in each "experiment"
   #runs is the number of times to run the simulation
   #prange is the width of the uniform noise on beta parameters
-  # If sameparams=FALSE (default), two data sets A and B will be instantiated
-  # with different parameter draws
-  # Otherwise, A and B have the same parameters within a replicate
-  #The function can return meanCFU or one run of data, as indicated by returnMeans
-  meanCFU<-tibble(meanA=double(), 
-                      meanB=double(),
-                      varA=double(),
-                      varB=double(),
-                     batch=double(), 
-                     run=double(),
-                     stringsAsFactors = TRUE)
+  #   If sameparams=FALSE (default), two data sets A and B will be instantiated
+  #   with different parameter draws
+  #   Otherwise, A and B have the same parameters within a replicate
+  # Returns a list containing summaries of all runs and the most recent run of simulated data
+  
+  # needs
+  pacman::p_load(e1071, tidyverse)
+  
+  # someplace to put data
+  temp<-vector("list", length=length(batch_sizes)*runs)
+  single_run<-vector("list", length=length(batch_sizes))
+  
+  idx<-1
+  #runs is the number of times to run the simulation
+  for (i in seq_len(runs)) {
+    #reps is the number of independent replicates to be performed in each "experiment"
+    for(k in seq_along(batch_sizes)){
+      tempA<-numeric()  # someplace to keep all the data within an "experiment"
+      tempB<-numeric()
+      repA<-numeric()
+      repB<-numeric()
+      nbatches<-min(maxSamples, floor(nWorms/batch_sizes[k])) # how many data points can we make with this many worms?
 
-    # someplace to put p-values for Wilcoxon tests
-  wpv1<-numeric(runs)
-  wpv5<-numeric(runs)
-  wpv10<-numeric(runs)
-  wpv20<-numeric(runs)
-  wpv50<-numeric(runs)
-  
-  # and for glm
-  gpv1<-numeric(runs)
-  gpv5<-numeric(runs)
-  gpv10<-numeric(runs)
-  gpv20<-numeric(runs)
-  gpv50<-numeric(runs)
-  
-  #determine how many batches we can create at each size
-  batches5<-min(maxSamples, nWorms/5)
-  batches10<-min(maxSamples, nWorms/10)
-  batches20<-min(maxSamples, nWorms/20)
-  batches50<-min(maxSamples, nWorms/50)
-  
-  j<-1
-  while (j <= runs){
-    i<-1
-    my1A<-numeric()
-    my5A<-numeric()
-    my10A<-numeric()
-    my20A<-numeric()
-    my50A<-numeric()
-    my1B<-numeric()
-    my5B<-numeric()
-    my10B<-numeric()
-    my20B<-numeric()
-    my50B<-numeric()
-    mydata<-data.frame(CFU=double(), 
-                       batch=double(), 
-                       replicate=double(), 
-                       set=character(), 
-                       logCFU=double(),
-                       stringsAsFactors = TRUE)
-    while(i <= reps){
-     temp5A<-numeric(batches5)
-     temp5B<-numeric(batches5)
-     temp10A<-numeric(batches10)
-     temp10B<-numeric(batches10)
-     temp20A<-numeric(batches20)
-     temp20B<-numeric(batches20)
-     temp50A<-numeric(batches50)
-     temp50B<-numeric(batches50)
-
-      a1<-a*(1+runif(1, min=-prange, max=prange))
-      b1<-b*(1+runif(1, min=-prange, max=prange))
-      if(sameParams){
-       a2<-a1
-       b2<-b1
-      }else {
-        a2<-a*(1+runif(1, min=-prange, max=prange))
-        b2<-b*(1+runif(1, min=-prange, max=prange))
-      }
-       tempA<-rbeta(maxSamples, a1, b1)*maxCFU
-       tempB<-rbeta(maxSamples, a2, b2)*maxCFU
-    for(k in 1:batches5){
-      temp1<-rbeta(5, a1, b1)*maxCFU
-      temp5A[k]<-mean(temp1, na.rm=TRUE)
-      temp2<-rbeta(5, a2, b2)*maxCFU
-      temp5B[k]<-mean(temp2, na.rm=TRUE)}
-    for (k in 1:batches10){
-      temp1<-rbeta(10, a1, b1)*maxCFU
-      temp10A[k]<-mean(temp1, na.rm=TRUE)
-      temp2<-rbeta(10, a2, b2)*maxCFU
-      temp10B[k]<-mean(temp2, na.rm=TRUE)}
-    for (k in 1:batches20){
-      temp1<-rbeta(20, a1, b1)*maxCFU
-      temp20A[k]<-mean(temp1, na.rm=TRUE)
-      temp2<-rbeta(20, a2, b2)*maxCFU
-      temp20B[k]<-mean(temp2, na.rm=TRUE)}
-    for (k in 1:batches50){
-      temp1<-rbeta(50, a1, b1)*maxCFU
-      temp50A[k]<-mean(temp1, na.rm=TRUE)
-      temp2<-rbeta(50, a2, b2)*maxCFU
-      temp50B[k]<-mean(temp2, na.rm=TRUE)}
-    #commit statistics to data frame
-    datacheck<-c(tempA, tempB, temp5A, temp5B, temp10A, temp10B, temp20A, temp20B, temp50A, temp50B)
-    if(sum(is.na(datacheck))==0){
-      mydata<-rbind(mydata, 
-                    data.frame(
-                      CFU=datacheck,
-                      batch=c(rep(1,(maxSamples*2)), rep(5,(batches5*2)), rep(10,(batches10*2)), rep(20,(batches20*2)), rep(50,(batches50*2))),
-                      replicate=rep(i, length(datacheck)),
-                      set=c(rep("A",maxSamples), rep("B",maxSamples),
-                            rep("A", batches5), rep("B", batches5),
-                            rep("A", batches10), rep("B", batches10),
-                            rep("A", batches20), rep("B", batches20),
-                            rep("A", batches50), rep("B", batches50)
-                            ),
-                      logCFU=log10(datacheck)
-                    ))
+      for (j in seq_len(reps)){
+        temp1<-numeric(length=nbatches)  # someplace to put the data sets
+        temp2<-numeric(length=nbatches)  
+        a1<-a*(1+runif(1, min=-prange, max=prange))  # note there are always new parameters across replicates
+        b1<-b*(1+runif(1, min=-prange, max=prange))
+        if(sameParams){ # instantiate new randomized parameters for set B?
+          a2<-a1
+          b2<-b1
+        }else {
+          a2<-a*(1+runif(1, min=-prange, max=prange))
+          b2<-b*(1+runif(1, min=-prange, max=prange))
+        } # end sameParams loop
+      
+        for (m in seq_len(nbatches)){ # make individual data points
+          temp1[m]<-mean(rbeta(batch_sizes[k], a1, b1)*maxCFU, na.rm=TRUE)
+          temp2[m]<-mean(rbeta(batch_sizes[k], a2, b2)*maxCFU, na.rm=TRUE)
+        } # end point by point generation
+        tempA<-c(tempA, temp1) # concatenate data
+        tempB<-c(tempB, temp2)
+        repA<-c(repA, rep(j, nbatches)) # and batch IDs
+        repB<-c(repB, rep(j, nbatches))
+      } # end loop over replicates
+      
+      #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      # construct raw data for this run
+      mydata<-tibble(
+        dist=paste("Beta(", a, ",", b, ")", sep=""),
+        batch=batch_sizes[k],
+        set=c(rep("A", nbatches*reps), rep("B", nbatches*reps)),
+        replicate=c(repA, repB),
+        FinalCount=c(tempA, tempB)
+      )
+      mydata$logCFU<-log10(mydata$FinalCount)    # create & correct log final counts
       mydata$logCFU[!is.finite(mydata$logCFU)]<-1
       mydata$logCFU[mydata$logCFU<0]<-1
-      print(min(mydata$logCFU)) # debug
-    }
-    # concatenate temp objects for easy stats
-    my1A<-c(my1A,tempA)
-    my5A<-c(my5A,temp5A)
-    my10A<-c(my10A,temp10A)
-    my20A<-c(my20A,temp20A)
-    my50A<-c(my50A,temp50A)
-    my1B<-c(my1B,tempB)
-    my5B<-c(my5B,temp5B)
-    my10B<-c(my10B,temp10B)
-    my20B<-c(my20B,temp20B)
-    my50B<-c(my50B,temp50B)
-    
-    i<-i+1
-    }
-#    print(my1)
-    meanCFU<-rbind(meanCFU, tibble(
-      meanA=c(mean(my1A), mean(my5A), mean(my10A), mean(my20A), mean(my50A)),
-      meanB=c(mean(my1B), mean(my5B), mean(my10B), mean(my20B), mean(my50B)),
-      varA=c(var(my1A), var(my5A), var(my10A), var(my20A), var(my50A)),
-      varB=c(var(my1B), var(my5B), var(my10B), var(my20B), var(my50B)),
-      batch=c(1, 5, 10, 20, 50),
-      run=j
-    ))
-    #print(meanCFU) # debug
-    
-      #Mann-Whitney U tests
-      wtest1<-wilcox.test(mydata$CFU[mydata$batch==1 & mydata$set=="A"],mydata$CFU[mydata$batch==1 & mydata$set=="B"])
-      wtest5<-wilcox.test(mydata$CFU[mydata$batch==5 & mydata$set=="A"],mydata$CFU[mydata$batch==5 & mydata$set=="B"])
-      wtest10<-wilcox.test(mydata$CFU[mydata$batch==10 & mydata$set=="A"],mydata$CFU[mydata$batch==10 & mydata$set=="B"])
-      wtest20<-wilcox.test(mydata$CFU[mydata$batch==20 & mydata$set=="A"],mydata$CFU[mydata$batch==20 & mydata$set=="B"])
-      wtest50<-wilcox.test(mydata$CFU[mydata$batch==50 & mydata$set=="A"],mydata$CFU[mydata$batch==50 & mydata$set=="B"])
+      #print(min(mydata$logCFU)) # debug
       
-      wpv1[j]<-wtest1$p.value
-      wpv5[j]<-wtest5$p.value
-      wpv10[j]<-wtest10$p.value
-      wpv20[j]<-wtest20$p.value
-      wpv50[j]<-wtest50$p.value
+      if(i==runs){#if this is the last run
+        #print(i) # debug
+        single_run[[k]]<-mydata
+      }
+      #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       
-      # and glm significance for setB
+      # tests
+      ttest1<-t.test(tempA, tempB)
+      wtest1<-wilcox.test(tempA, tempB, exact=FALSE)
+      
+      # glm significance for "set"
+      #glimpse(mydata) # debug
+      #print(min(mydata$logCFU)) # debug
       myglm.single<-mydata %>%
-        dplyr::filter(batch==1) %>%
         glm(logCFU~replicate*set, family=Gamma, data=.)
-      gpv1[j]<-coef(summary(myglm.single))["setB",4]
       
-      myglm.batch5<-mydata %>%
-        dplyr::filter(batch==5) %>%
-        glm(logCFU~replicate*set, family=Gamma, data=.)
-      gpv5[j]<-coef(summary(myglm.batch5))["setB",4]
+      # ANOVA
+      my.aov<-aov(logCFU~replicate+set, data=mydata)
       
-      myglm.batch10<-mydata %>%
-        dplyr::filter(batch==10) %>%
-        glm(logCFU~replicate*set, family=Gamma, data=.)
-      gpv10[j]<-coef(summary(myglm.batch10))["setB",4]
+      # store summary stats
+      temp[[idx]]<-tibble(
+        dist=paste("Beta(", a, ",", b, ")", sep=""),
+        Run=i,
+        nreps=reps,
+        batch=batch_sizes[k],
+        mean_A=mean(tempA, na.rm=TRUE),
+        logmean_A=log10(mean(tempA, na.rm=TRUE)),
+        var_A=var(tempA,na.rm=TRUE),
+        logvar_A=log10(var(tempA,na.rm=TRUE)),
+        cv_A=sd(tempA,na.rm=TRUE)/mean(tempA,na.rm=TRUE),
+        skew_A=skewness(tempA,na.rm=TRUE),
+        kurt_A=kurtosis(tempA,na.rm=TRUE),
+        mean_B=mean(tempB,na.rm=TRUE),
+        logmean_B=log10(mean(tempB, na.rm=TRUE)),
+        var_B=var(tempB,na.rm=TRUE),
+        logvar_B=log10(var(tempB,na.rm=TRUE)),
+        cv_B=sd(tempB,na.rm=TRUE)/mean(tempB,na.rm=TRUE),
+        skew_B=skewness(tempB,na.rm=TRUE),
+        kurt_B=kurtosis(tempB,na.rm=TRUE),
+        p.t=ttest1$p.value,
+        p.w=wtest1$p.value,
+        p.glm=coef(summary(myglm.single))["setB",4],
+        p.aov=summary(my.aov)[[1]][2,5]
+      )
+      idx<-idx+1
+  } # end loop over batch sizes (k)
 
-      myglm.batch20<-mydata %>%
-        dplyr::filter(batch==20) %>%
-        glm(logCFU~replicate*set, family=Gamma, data=.)
-      gpv20[j]<-coef(summary(myglm.batch20))["setB",4]
+  } # end loop over runs (i)
+  
+  dataSet<-dplyr::bind_rows(temp)  # unpack
+  dataSet<-dataSet %>%
+    mutate(
+      meandist=abs(mean_A-mean_B)/(mean_A+mean_B),
+      cvdist=abs((sqrt(var_A)/mean_A) - (sqrt(var_B)/mean_B)),
+      skewdist=abs(skew_A-skew_B),
+      kurtdist=abs(kurt_A-kurt_B)
+    )
+  
+  singleRunData<-dplyr::bind_rows(single_run) # unpack most recent run
+  my_list<-list("data_summary" = dataSet, # returns summary data
+                "single_run" = singleRunData) # and the most recent single run
 
-      myglm.batch50<-mydata %>%
-        dplyr::filter(batch==50) %>%
-        glm(logCFU~replicate*set, family=Gamma, data=.)
-      gpv50[j]<-coef(summary(myglm.batch50))["setB",4]
-
-      j<-j+1
-  }
-  w.pvals<-c(sum(wpv1<0.05)/runs, sum(wpv5<0.05)/runs, sum(wpv10<0.05)/runs, sum(wpv20<0.05)/runs, sum(wpv50<0.05)/runs)
-  print(w.pvals)
-  glm.pvals<-c(sum(gpv1<0.05)/runs, sum(gpv5<0.05)/runs, sum(gpv10<0.05)/runs, sum(gpv20<0.05)/runs, sum(gpv50<0.05)/runs)
-  print(glm.pvals)
-  
-  #mydata$logCFU<-log10(mydata$CFU)
-  #mydata$logCFU[!is.finite(mydata$logCFU)]<-0
-  
-  if(returnMEANS){return(meanCFU)}
-  else {return(mydata)}
-  
+  return(my_list)
 }
