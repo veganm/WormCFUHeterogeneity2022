@@ -821,6 +821,11 @@ wormSimBetaRand.1.5.long<-wormSimBetaRand.1.5.long %>%
          dist=wormSimBetaRand.1.5$dist_A[1])
 idx<-which(wormSimBetaRand.1.5.long$set=="B")
 wormSimBetaRand.1.5.long$dist[idx]<-wormSimBetaRand.1.5$dist_B[1]
+# reorder factors
+wormSimBetaRand.1.5.long$stat<-factor(wormSimBetaRand.1.5.long$stat,
+                                       levels=c('mean', 'logmean',
+                                                'var', 'logvar',
+                                                'cv', 'skew', 'kurt'))
 glimpse(wormSimBetaRand.1.5.long)
 
 wormSimBetaRand.1.5_dist<-as_tibble(wormSimBetaRand.1.5) %>%
@@ -828,20 +833,21 @@ wormSimBetaRand.1.5_dist<-as_tibble(wormSimBetaRand.1.5) %>%
   rename(mean=meandist,
          cv=cvdist,
          skew=skewdist,
-         kurt=kurtdist)
+         kurt=kurtdist) %>%
+  pivot_longer(mean:kurt, names_to="stat", values_to="value")
 wormSimBetaRand.1.5_dist$set<-"Distance"
-
-# and combine
-#wormSimBetaRand.1.5_long<-rbind(wormSimBetaRand.1.5_A, wormSimBetaRand.1.5_B)
-#wormSimBetaRand.1.5.long$logValue<-log10(wormSimBetaRand.1.5.long$value)
+wormSimBetaRand.1.5_dist$stat<-factor(wormSimBetaRand.1.5_dist$stat,
+                                      levels=c('mean', 'cv', 'skew', 'kurt'))
+glimpse(wormSimBetaRand.1.5_dist)
 
 #plot out
-pSimBatchBetaRand.1.5.AB<-wormSimBetaRand.1.5_long %>%
+pSimBatchBetaRand.1.5.AB<-wormSimBetaRand.1.5.long %>%
   #dplyr::relocate(set) %>%
   #dplyr::relocate(logMean, .after=mean) %>%
   #dplyr::select(-mean) %>%
   #rename(average=logMean) %>%
   #pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
+  dplyr::filter(stat!="mean" & stat!="var" & stat!="logvar") %>%
   ggplot(aes(x=factor(batch), y=value, color=factor(batch)))+
   geom_violin(fill=NA) + theme_classic() + 
   scale_color_viridis_d(begin=0.3, end=0.8) +  
@@ -855,10 +861,8 @@ pSimBatchBetaRand.1.5.AB<-wormSimBetaRand.1.5_long %>%
 pSimBatchBetaRand.1.5.AB
 
 pSimBatchBetaRand.1.5.dist<-wormSimBetaRand.1.5_dist %>%
-  dplyr::relocate(set) %>%
-  rename(average=mean) %>%
-  pivot_longer(average:kurt, names_to="moment", values_to="value") %>%
-  ggplot(aes(x=batch, y=value, color=batch))+
+  #dplyr::relocate(set) %>%
+  ggplot(aes(x=factor(batch), y=value, color=factor(batch)))+
   geom_violin(fill=NA) + 
   theme_classic() + 
   scale_color_viridis_d(begin=0.3, end=0.8) +
@@ -867,7 +871,8 @@ pSimBatchBetaRand.1.5.dist<-wormSimBetaRand.1.5_dist %>%
         axis.title.x = element_blank(),  legend.position="none",
         plot.title=element_text(hjust=0.5, size=14)) + 
   #  labs(title=paste("\u03b2","(1,5) A", sep=""), y="Mean")
-  facet_grid(rows=vars(moment), cols=vars(set), scales="free_y") 
+  facet_grid(rows=vars(stat), cols=vars(set), scales="free_y") 
+pSimBatchBetaRand.1.5.dist
 
 plot_grid(pSimBatchBetaRand.1.5.AB, pSimBatchBetaRand.1.5.dist, ncol=2, rel_widths = c(2,1), labels="AUTO")
 ggsave("FigS6_pSimBatchBetaRand.1.5.moments.png", width=12, height=10, units="in", dpi=400)      
@@ -877,68 +882,75 @@ ggsave("FigS6_pSimBatchBetaRand.1.5.moments.png", width=12, height=10, units="in
 #################     FIGURE S7     #############################
 #### add data from symmetric distribution for comparison
 #note these runs use the flat U(-0.1,0.1) parameter error
-wormSimBetaRand.5.5<-wormSimBatchBetaCompare(5,5,5,5,1000,24,100000, 0.1)
-wormSimBetaRand.5.5$cvA<-sqrt(wormSimBetaRand.5.5$varA)/wormSimBetaRand.1.5$meanA
-wormSimBetaRand.5.5$cvB<-sqrt(wormSimBetaRand.5.5$varB)/wormSimBetaRand.1.5$meanB
-wormSimBetaRand.5.5$cvdist<-abs(wormSimBetaRand.5.5$cvA-wormSimBetaRand.1.5$cvB)
-wormSimBetaRand.5.5$meandist<-abs(wormSimBetaRand.5.5$meanA-wormSimBetaRand.5.5$meanB)/(wormSimBetaRand.5.5$meanA+wormSimBetaRand.5.5$meanB)
 
-pSimBatchBetaRand.1.5.meanA<-wormSimBetaRand.1.5 %>%
-  ggplot(aes(x=batch, y=log10(meanA), color=batch))+
+wormSimBetaRand.5.5<-wormSimBatchBetaCompare(a1=5, b1=5, a2=5, b2=5, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
+
+# Flip the data set around so it can get factor-gridded
+wormSimBetaRand.5.5.long<-wormSimBetaRand.5.5 %>%
+  dplyr::select(Run:kurt_B) %>% # select only summary stats for data sets
+  pivot_longer(cols=mean_A:kurt_B, names_to=c("stat", "set"), values_to = "value", names_pattern='([a-z]+)_([A-B])')
+wormSimBetaRand.5.5.long<-wormSimBetaRand.5.5.long %>%
+  mutate(comparison=wormSimBetaRand.5.5$comparison[1],
+         dist=wormSimBetaRand.5.5$dist_A[1])
+idx<-which(wormSimBetaRand.5.5.long$set=="B")
+wormSimBetaRand.5.5.long$dist[idx]<-wormSimBetaRand.5.5$dist_B[1]
+# reorder factors
+wormSimBetaRand.5.5.long$stat<-factor(wormSimBetaRand.5.5.long$stat,
+                                      levels=c('mean', 'logmean',
+                                               'var', 'logvar',
+                                               'cv', 'skew', 'kurt'))
+glimpse(wormSimBetaRand.5.5.long)
+
+wormSimBetaRand.5.5_dist<-as_tibble(wormSimBetaRand.5.5) %>%
+  select(Run, batch, n, meandist, cvdist, skewdist, kurtdist, comparison) %>%
+  rename(mean=meandist,
+         cv=cvdist,
+         skew=skewdist,
+         kurt=kurtdist) %>%
+  pivot_longer(mean:kurt, names_to="stat", values_to="value")
+wormSimBetaRand.5.5_dist$set<-"Distance"
+wormSimBetaRand.5.5_dist$stat<-factor(wormSimBetaRand.5.5_dist$stat,
+                                      levels=c('mean', 'cv', 'skew', 'kurt'))
+glimpse(wormSimBetaRand.5.5_dist)
+
+
+#plot out
+pSimBatchBetaRand.5.5.AB<-wormSimBetaRand.5.5.long %>%
+  dplyr::filter(stat!="mean" & stat!="var" & stat!="logvar") %>%
+  ggplot(aes(x=factor(batch), y=value, color=factor(batch)))+
   geom_violin(fill=NA) + theme_classic() + 
- # ylim(3.8, 5)+
+  scale_color_viridis_d(begin=0.3, end=0.8) +  
   geom_jitter(shape=16, position=position_jitter(0.05)) +
-  scale_color_viridis_d(begin=0.3, end=0.8) +
   theme(text=element_text(size=14), 
         axis.title.x = element_blank(),  
         legend.position="none",
-        plot.title=element_text(hjust=0.5)) + 
-  labs(title=paste("\u03b2","(1,5) A", sep=""), y="Mean")
-#pSimBatchBetaRand.1.5.meanA
+        plot.title=element_text(hjust=0.5, size=14)) + 
+  #  labs(title=paste("\u03b2","(1,5) A", sep=""), y="Mean")
+  facet_grid(rows=vars(stat), cols=vars(set), scales="free_y")
+pSimBatchBetaRand.5.5.AB
 
-pSimBatchBetaRand.1.5.meandist<-wormSimBetaRand.1.5 %>%
-  ggplot(aes(x=batch, y=meandist, color=batch))+
-  geom_violin(fill=NA) + theme_classic() + 
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  scale_color_viridis_d(begin=0.3, end=0.8) +
-  ylim(-0.01,0.45)+
-  theme(text=element_text(size=14), 
-        #axis.title.x = element_blank(), 
-        legend.position="none",
-        plot.title=element_text(hjust=0.5)) + 
-  labs(title="Distance", y="Dist(mean)", x="Batch Size")
-
-pSimBatchBetaRand.5.5.meanA<-wormSimBetaRand.5.5 %>%
-  ggplot(aes(x=batch, y=log10(meanA), color=batch))+
-  geom_violin(fill=NA) + theme_classic() + 
- # ylim(3.8, 5)+
+pSimBatchBetaRand.5.5.dist<-wormSimBetaRand.5.5_dist %>%
+  ggplot(aes(x=factor(batch), y=value, color=factor(batch)))+
+  geom_violin(fill=NA) + 
+  theme_classic() + 
   scale_color_viridis_d(begin=0.3, end=0.8) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   theme(text=element_text(size=14), 
-        axis.title.x = element_blank(),  
-        legend.position="none",
-        plot.title=element_text(hjust=0.5)) + 
-  labs(title=paste("\u03b2","(5,5) A", sep=""), y="Mean")
+        axis.title.x = element_blank(),  legend.position="none",
+        plot.title=element_text(hjust=0.5, size=14)) + 
+  #  labs(title=paste("\u03b2","(1,5) A", sep=""), y="Mean")
+  facet_grid(rows=vars(stat), cols=vars(set), scales="free_y") 
+pSimBatchBetaRand.5.5.dist
 
-pSimBatchBetaRand.5.5.meandist<-wormSimBetaRand.5.5 %>%
-  ggplot(aes(x=batch, y=meandist, color=batch))+
-  geom_violin(fill=NA) + theme_classic() + 
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  ylim(-0.01,0.45)+
-  scale_color_viridis_d(begin=0.3, end=0.8) +
-  theme(text=element_text(size=14), 
-        #axis.title.x = element_blank(), 
-        legend.position="none",
-        plot.title=element_text(hjust=0.5)) + 
-  #labs(title="Distance", y="Dist(mean)")
-  labs(title=paste("\u03b2","(5,5) Distance"), y="Dist(Mean)", x="Batch Size")
+plot_grid(pSimBatchBetaRand.5.5.AB, pSimBatchBetaRand.5.5.dist, ncol=2, rel_widths = c(2,1), labels="AUTO")
+ggsave("FigS7_pSimBatchBetaRand.5.5.moments.png", width=12, height=10, units="in", dpi=400)      
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Assembling Figure S7
-plot_grid(pSimBatchBetaRand.1.5.meanA, pSimBatchBetaRand.5.5.meanA,
-          pSimBatchBetaRand.1.5.meandist, pSimBatchBetaRand.5.5.meandist, 
-          ncol=2, nrow=2, labels="AUTO", align = "h")
-ggsave("FigS7_pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=6, units="in", dpi=400)
+#plot_grid(pSimBatchBetaRand.1.5.meanA, pSimBatchBetaRand.5.5.meanA,
+#          pSimBatchBetaRand.1.5.meandist, pSimBatchBetaRand.5.5.meandist, 
+#          ncol=2, nrow=2, labels="AUTO", align = "h")
+#ggsave("FigS7_pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=6, units="in", dpi=400)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -959,36 +971,82 @@ ggsave("FigS7_pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=6, units=
 #maxSamples<-12
 #maxCFU<-100000
 
-# calls function
-# wormSimBatchBeta3(a, b, maxCFU, nWorms, maxSamples, runs, reps=3, sameParams=FALSE, returnMEANS=TRUE)
+# wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=c(1,5,10,20,50),
+#         maxCFU=1e5, prange=0.1, sameParams=FALSE){
+# Function that generates beta-distributed "worm CFU counts" with replicate days (default reps=3)
 
-wormSim3.1.5.s<-wormSimBatchBeta3(1,5,100000,100,12,1000)
-#wormSim3.1.5.s$set<-as.factor(wormSim3.1.5.s$set)
-#wormSim3.1.5.s$logCFU<-log10(wormSim3.1.5.s$CFU)
-wormSim3.1.5.m<-wormSimBatchBeta3(1,5,100000,200,24,1000)
-wormSim3.1.5.l<-wormSimBatchBeta3(1,5,100000,500,48,1000)
+wormSim3.1.5.s<-wormSimBatchBeta3(a=1,b=5,nWorms=100, maxSamples=24, runs=1000)
+wormSim3.1.5.s.data<-wormSim3.1.5.s$single_run # Separate the returned data
+wormSim3.1.5.s.summary<-wormSim3.1.5.s$data_summary
+rm(wormSim3.1.5.s)
 
-wormSim3.5.5.s<-wormSimBatchBeta3(5,5,100000,100,12,1000)
-wormSim3.5.5.m<-wormSimBatchBeta3(5,5,100000,200,24,1000)
-wormSim3.5.5.l<-wormSimBatchBeta3(5,5,100000,500,48,1000)
+#wormSim3.1.5.m<-wormSimBatchBeta3(1,5,100000,200,24,1000)
+wormSim3.1.5.m<-wormSimBatchBeta3(a=1,b=5,nWorms=200, maxSamples=24, runs=1000)
+wormSim3.1.5.m.data<-wormSim3.1.5.m$single_run # Separate the returned data
+wormSim3.1.5.m.summary<-wormSim3.1.5.m$data_summary
+rm(wormSim3.1.5.m)
 
-wormSim3.3.7.s<-wormSimBatchBeta3(3,7,100000,100,12,1000)
-wormSim3.3.7.m<-wormSimBatchBeta3(3,7,100000,200,24,1000)
-wormSim3.3.7.l<-wormSimBatchBeta3(3,7,100000,500,48,1000)
+#wormSim3.1.5.l<-wormSimBatchBeta3(1,5,100000,500,48,1000)
+wormSim3.1.5.l<-wormSimBatchBeta3(a=1,b=5,nWorms=500, maxSamples=24, runs=1000)
+wormSim3.1.5.l.data<-wormSim3.1.5.l$single_run # Separate the returned data
+wormSim3.1.5.l.summary<-wormSim3.1.5.l$data_summary
+rm(wormSim3.1.5.l)
+
+#wormSim3.5.5.s<-wormSimBatchBeta3(5,5,100000,100,12,1000)
+wormSim3.5.5.s<-wormSimBatchBeta3(a=5,b=5,nWorms=100, maxSamples=12, runs=1000)
+wormSim3.5.5.s.data<-wormSim3.5.5.s$single_run # Separate the returned data
+wormSim3.5.5.s.summary<-wormSim3.5.5.s$data_summary
+rm(wormSim3.5.5.s)
+
+#wormSim3.5.5.m<-wormSimBatchBeta3(5,5,100000,200,24,1000)
+wormSim3.5.5.m<-wormSimBatchBeta3(a=5,b=5,nWorms=200, maxSamples=24, runs=1000)
+wormSim3.5.5.m.data<-wormSim3.5.5.m$single_run # Separate the returned data
+wormSim3.5.5.m.summary<-wormSim3.5.5.m$data_summary
+rm(wormSim3.5.5.m)
+
+#wormSim3.5.5.l<-wormSimBatchBeta3(5,5,100000,500,48,1000)
+wormSim3.5.5.l<-wormSimBatchBeta3(a=5,b=5,nWorms=500, maxSamples=48, runs=1000)
+wormSim3.5.5.l.data<-wormSim3.5.5.l$single_run # Separate the returned data
+wormSim3.5.5.l.summary<-wormSim3.5.5.l$data_summary
+rm(wormSim3.5.5.l)
+
+# Beta (3,7)
+wormSim3.3.7.s<-wormSimBatchBeta3(a=3,b=7,nWorms=100, maxSamples=12, runs=1000)
+wormSim3.3.7.s.data<-wormSim3.3.7.s$single_run # Separate the returned data
+wormSim3.3.7.s.summary<-wormSim3.3.7.s$data_summary
+rm(wormSim3.3.7.s)
+
+wormSim3.3.7.m<-wormSimBatchBeta3(a=3,b=7,nWorms=200, maxSamples=24, runs=1000)
+wormSim3.3.7.m.data<-wormSim3.3.7.m$single_run # Separate the returned data
+wormSim3.3.7.m.summary<-wormSim3.3.7.m$data_summary
+rm(wormSim3.3.7.m)
+
+wormSim3.3.7.l<-wormSimBatchBeta3(a=3,b=7,nWorms=500, maxSamples=48, runs=1000)
+wormSim3.3.7.l.data<-wormSim3.3.7.l$single_run # Separate the returned data
+wormSim3.3.7.l.summary<-wormSim3.3.7.l$data_summary
+rm(wormSim3.3.7.l)
 
 # here we use enough worms to allow 24 batches even at 50 worms
-wormSim3.5.5.m.means<-wormSimBatchBeta3(5,5,100000,1200,24,1000)
-wormSim3.1.5.m.means<-wormSimBatchBeta3(1,5,100000,1200,24,1000)
-wormSim3.5.5.m.means$batch<-as.factor(wormSim3.5.5.m.means$batch)
-wormSim3.1.5.m.means$batch<-as.factor(wormSim3.1.5.m.means$batch)
+wormSim3.5.5.m24<-wormSimBatchBeta3(a=5,b=5,nWorms=1200, maxSamples=24, runs=1000)
+wormSim3.5.5.m24.data<-wormSim3.5.5.m24$single_run # Separate the returned data
+wormSim3.5.5.m24.summary<-wormSim3.5.5.m24$data_summary
+rm(wormSim3.5.5.m24)
 
-# simulated data for plotting
-wormSim3.1.5.m<-wormSimBatchBeta3(1,5,100000,1200,24,1000, returnMEANS=FALSE)
-wormSim3.1.5.m$batch<-as.factor(wormSim3.1.5.m$batch)
-wormSim3.1.5.m$day<-as.factor(wormSim3.1.5.m$day)
-wormSim3.1.5.m$replicate<-as.factor(wormSim3.1.5.m$replicate)
+wormSim3.1.5.m24<-wormSimBatchBeta3(a=1,b=5,nWorms=1200, maxSamples=24, runs=1000)
+wormSim3.1.5.m24.data<-wormSim3.1.5.m24$single_run # Separate the returned data
+wormSim3.1.5.m24.summary<-wormSim3.1.5.m24$data_summary
+rm(wormSim3.1.5.m24)
 
-wormSim3.1.5.m %>%
+# factor some data labels for plotting
+wormSim3.1.5.m24.data$batch<-as.factor(wormSim3.1.5.m24.data$batch)
+wormSim3.1.5.m24.data$set<-as.factor(wormSim3.1.5.m24.data$set)
+wormSim3.1.5.m24.data$replicate<-as.factor(wormSim3.1.5.m24.data$replicate)
+wormSim3.5.5.m24.data$batch<-as.factor(wormSim3.5.5.m24.data$batch)
+wormSim3.5.5.m24.data$set<-as.factor(wormSim3.5.5.m24.data$set)
+wormSim3.5.5.m24.data$replicate<-as.factor(wormSim3.5.5.m24.data$replicate)
+
+# plot out raw data
+wormSim3.1.5.m24.data %>%
   ggplot(aes(x=batch, y=logCFU, color=replicate)) + 
   geom_violin(fill=NA) + 
   geom_point(shape=16, position=position_jitterdodge(0.2)) +
@@ -1006,22 +1064,10 @@ wormSim3.1.5.m %>%
 ggsave("FigureS8_pwormSim3.1.5.examplerun.png", width=8, height=4, units="in", dpi=300)
 
 ## plot differences in convergence of means for one-day vs. 3-day data
-wormSim3.5.5.m.means$meandist<-abs(wormSim3.5.5.m.means$meanA-wormSim3.5.5.m.means$meanB)/(wormSim3.5.5.m.means$meanA+wormSim3.5.5.m.means$meanB)
-
-pSimBatchBetaRand.5.5.mean3days<-wormSim3.5.5.m.means %>%
-  ggplot(aes(x=batch, y=log10(meanA), color=batch))+
-  geom_violin(fill=NA) + theme_classic() + 
-  ylim(4.1,5)+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  scale_color_viridis_d(begin=0.3, end=0.8) +
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), legend.position="none",
-        plot.title=element_text(hjust=0.5)) + 
-  labs(title=paste("\u03b2","(5,5)x3"), y="Mean")
-#pSimBatchBetaRand.5.5.mean3days
-
-pSimBatchBetaRand.5.5.meandist3days<-wormSim3.5.5.m.means %>%
-  ggplot(aes(x=batch, y=meandist, color=batch))+
+#wormSim3.5.5.m.means$meandist<-abs(wormSim3.5.5.m.means$meanA-wormSim3.5.5.m.means$meanB)/(wormSim3.5.5.m.means$meanA+wormSim3.5.5.m.means$meanB)
+glimpse(wormSim3.5.5.m24.summary)
+pSimBatchBetaRand.5.5.meandist3days<-wormSim3.5.5.m24.summary %>%
+  ggplot(aes(x=factor(batch), y=meandist, color=factor(batch)))+
   geom_violin(fill=NA) + theme_classic() + 
   ylim(-0.01,0.2)+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
@@ -1031,40 +1077,63 @@ pSimBatchBetaRand.5.5.meandist3days<-wormSim3.5.5.m.means %>%
         legend.position="none",
         plot.title=element_text(hjust=0.5)) + 
   labs(title=paste("\u03b2","(5,5)x3 Distance"), y="Dist(Mean)", x="Batch Size")
-#pSimBatchBetaRand.5.5.meandist3days
+pSimBatchBetaRand.5.5.meandist3days
+
+#~~~~~~~~~~~~~~~~~~~~~~
+# straighten out data set to plot summary stats
+wormSimBetaRand.5.5.m24.summary.long<-wormSim3.5.5.m24.summary %>%
+  dplyr::select(dist:kurt_B) %>% # select only summary stats for data sets
+  pivot_longer(cols=mean_A:kurt_B, names_to=c("stat", "set"), values_to = "value", names_pattern='([a-z]+)_([A-B])')
+
+# reorder factors
+wormSimBetaRand.5.5.m24.summary.long$stat<-factor(wormSimBetaRand.5.5.m24.summary.long$stat,
+                                      levels=c('mean', 'logmean',
+                                               'var', 'logvar',
+                                               'cv', 'skew', 'kurt'))
+glimpse(wormSimBetaRand.5.5.m24.summary.long)
+
+# rearrange distances between runs A and B in simulation for plotting
+wormSim3.5.5.m24.summary.dist<-wormSim3.5.5.m24.summary %>%
+  select(dist, Run, batch, meandist, cvdist, skewdist, kurtdist) %>%
+  rename(mean=meandist,
+         cv=cvdist,
+         skew=skewdist,
+         kurt=kurtdist) %>%
+  pivot_longer(mean:kurt, names_to="stat", values_to="value")
+wormSim3.5.5.m24.summary.dist$set<-"Distance"
+wormSim3.5.5.m24.summary.dist$stat<-factor(wormSimBetaRand.5.5_dist$stat,
+                                      levels=c('mean', 'cv', 'skew', 'kurt'))
+glimpse(wormSim3.5.5.m24.summary.dist)
+
+# plot only means
+pSimBatchBetaRand.5.5.m24.mean3days<-wormSimBetaRand.5.5.m24.summary.long %>%
+  dplyr::filter(stat=="logmean") %>%
+  ggplot(aes(x=factor(batch), y=value, color=factor(batch)))+
+  geom_violin(fill=NA) + 
+  theme_classic() + 
+  ylim(4.1,5)+
+  geom_jitter(shape=16, position=position_jitter(0.05)) +
+  scale_color_viridis_d(begin=0.3, end=0.8) +
+  theme(text=element_text(size=14), 
+        axis.title.x = element_blank(), legend.position="none",
+        plot.title=element_text(hjust=0.5)) + 
+  labs(title=paste("\u03b2","(5,5)x3"), y="Mean", color="Data Set")+
+  facet_wrap(~set)
+pSimBatchBetaRand.5.5.m24.mean3days
+
 
 # Figure S8
-plot_grid(pSimBatchBetaRand.5.5.meanA,pSimBatchBetaRand.5.5.mean3days,
-          pSimBatchBetaRand.5.5.meandist,pSimBatchBetaRand.5.5.meandist3days, 
-          align="h")
+plot_grid(#pSimBatchBetaRand.5.5.meanA,
+          pSimBatchBetaRand.5.5.m24.mean3days,
+          #pSimBatchBetaRand.5.5.meandist,
+          pSimBatchBetaRand.5.5.meandist3days, 
+          #align="h",
+          labels="AUTO"
+          )
 ggsave("FigS8_pSimBatchBetaRand.5.5.meancompare3days.png", width=6, height=6, units="in")
 
 ## The mean converges nicely, and the distance between means is low, in the 3-day data
 
-wormSim3.5.5.m.means$cvA<-sqrt(wormSim3.5.5.m.means$varA)/wormSim3.5.5.m.means$meanA
-wormSim3.5.5.m.means$cvB<-sqrt(wormSim3.5.5.m.means$varB)/wormSim3.5.5.m.means$meanB
-pSimBatchBetaRand.5.5.cv3days<-wormSim3.5.5.m.means %>%
-  ggplot(aes(x=batch, y=cvA, color=batch))+
-  geom_violin(fill=NA) + theme_classic() + 
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), legend.position="none",
-        plot.title=element_text(hjust=0.5, size=14)) + 
-  labs(title="Beta(5,5)x3", y="CV")
-pSimBatchBetaRand.5.5.cv3days
-plot_grid(pSimBatchBetaRand.5.5.cvA,pSimBatchBetaRand.5.5.cv3days)
-
-pSimBatchBetaRand.1.5.mean3days<-wormSim3.1.5.m.means %>%
-  ggplot(aes(x=batch, y=log10(meanA), color=batch))+
-  geom_violin(fill=NA) + theme_classic() + 
-  ylim(3.7,4.4)+
-  geom_jitter(shape=16, position=position_jitter(0.05)) +
-  theme(text=element_text(size=14), 
-        axis.title.x = element_blank(), legend.position="none",
-        plot.title=element_text(hjust=0.5, size=14)) + 
-  labs(title="Beta(1,5)x3", y="Mean")
-plot_grid(pSimBatchBetaRand.1.5.meanA, pSimBatchBetaRand.1.5.mean3days, pSimBatchBetaRand.5.5.meanA, pSimBatchBetaRand.5.5.mean3days, nrow=2, ncol=2, labels="AUTO")
-ggsave("pSimBatchBetaRand.1.5.vs.5.5.means.png", width=8, height=8, units="in")
 
 
 
