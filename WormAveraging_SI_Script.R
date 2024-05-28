@@ -779,6 +779,19 @@ simBetaLHS %>%
 # ok back to beta starting at B(1,5) why not
 # without much loss of generality let's draw parameter shifts from U(-0.1, 0.1) each run
 
+# wormSimBatchBetaCompare<-function(a1, b1, a2, b2, runs=10, batches=24, batch_sizes=c(1,5,10,20,50),
+#                                   maxCFU=10e5, prange=0){
+  #Function that simulates worm CFU data based on draws from beta distribution
+  # and compares simulated distributions using t-tests & Wilcoxon
+wormSimBetaRand.1.5<-wormSimBatchBetaCompare(a1=1, b1=5, a2=1, b2=5, runs=1000, batches=24, maxCFU=100000, prange=0.1)  
+glimpse(wormSimBetaRand.1.5)
+
+#fraction significant at batch size
+wormSimBetaRand.1.5 %>%
+  group_by(batch) %>%
+  summarize(frac.t=length(which(p.t<0.05))/n(),
+            frac.w=length(which(p.w<0.05))/n())
+
 wormSimBetaRand.1.5<-wormSimBatchBetaCompare(1,5,1,5,1000,24,100000, 0.1)
 wormSimBetaRand.p5.2p5<-wormSimBatchBetaCompare(0.5,2.5,0.5,2.5,1000,24,100000, 0.1)
 wormSimBetaRand.5.1<-wormSimBatchBetaCompare(5,1,5,1,1000,24,100000, 0.1)
@@ -788,12 +801,12 @@ wormSimBetaRand.2p5.2p5<-wormSimBatchBetaCompare(2.5,2.5,2.5,2.5,1000,24,100000,
 wormSimBetaRand.1.1<-wormSimBatchBetaCompare(1,1,1,1,1000,24,100000, 0.1)
 
 # calculate CV; include the distances
-wormSimBetaRand.1.5$meandist<-abs(wormSimBetaRand.1.5$meanA-wormSimBetaRand.1.5$meanB)/(wormSimBetaRand.1.5$meanA+wormSimBetaRand.1.5$meanB)
-wormSimBetaRand.1.5$cvA<-sqrt(wormSimBetaRand.1.5$varA)/wormSimBetaRand.1.5$meanA
-wormSimBetaRand.1.5$cvB<-sqrt(wormSimBetaRand.1.5$varB)/wormSimBetaRand.1.5$meanB
-wormSimBetaRand.1.5$cvdist<-abs(wormSimBetaRand.1.5$cvA-wormSimBetaRand.1.5$cvB)
-wormSimBetaRand.1.5$skewdist<-abs(wormSimBetaRand.1.5$skewA-wormSimBetaRand.1.5$skewB)
-wormSimBetaRand.1.5$kurtdist<-abs(wormSimBetaRand.1.5$kurtA-wormSimBetaRand.1.5$kurtB)
+#wormSimBetaRand.1.5$meandist<-abs(wormSimBetaRand.1.5$meanA-wormSimBetaRand.1.5$meanB)/(wormSimBetaRand.1.5$meanA+wormSimBetaRand.1.5$meanB)
+#wormSimBetaRand.1.5$cvA<-sqrt(wormSimBetaRand.1.5$varA)/wormSimBetaRand.1.5$meanA
+#wormSimBetaRand.1.5$cvB<-sqrt(wormSimBetaRand.1.5$varB)/wormSimBetaRand.1.5$meanB
+#wormSimBetaRand.1.5$cvdist<-abs(wormSimBetaRand.1.5$cvA-wormSimBetaRand.1.5$cvB)
+#wormSimBetaRand.1.5$skewdist<-abs(wormSimBetaRand.1.5$skewA-wormSimBetaRand.1.5$skewB)
+#wormSimBetaRand.1.5$kurtdist<-abs(wormSimBetaRand.1.5$kurtA-wormSimBetaRand.1.5$kurtB)
 
 # Flip the data set around so it can get factor-gridded
 wormSimBetaRand.1.5_A<-as_tibble(wormSimBetaRand.1.5) %>%
