@@ -1140,10 +1140,14 @@ ggsave("FigS8_pSimBatchBetaRand.5.5.meancompare3days.png", width=6, height=6, un
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ###########  What if we instead take the populations of means in regressions?
 wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, maxCFU=100000)
+#glimpse(wormSimF.1.5)
+wormSimF.1.5<- wormSimF.1.5 %>%
+  mutate(unique_run=paste(set, run, sep=""))
 glimpse(wormSimF.1.5)
+wormSimF.1.5$unique_run<-as.factor(wormSimF.1.5$unique_run)
 wormSimF.1.5$run<-as.factor(wormSimF.1.5$run)
 wormSimF.1.5 %>%
- ggplot(aes(x=factor(batch), y=logCFU, color=run)) + 
+ ggplot(aes(x=factor(batch), y=logCFU, color=factor(run))) + 
   geom_violin(fill=NA) + 
   geom_point(shape=16, position=position_jitterdodge(0.2)) +
   ylim(1,5) + theme_classic() + 
@@ -1161,7 +1165,7 @@ wormSimF.1.5 %>%
 # put through GLM
 wormsimF.1.5.glm.single<-wormSimF.1.5 %>%
   dplyr::filter(batch==1) %>%
-  glm(logCFU~run*set, family=Gamma, data=.)
+  glm(logCFU~run+set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.single)
 
 # checks
@@ -1170,25 +1174,62 @@ scatter.smooth(1:length(rstandard(wormsimF.1.5.glm.single, type='deviance')), rs
 scatter.smooth(predict(wormsimF.1.5.glm.single, type='response'), #residuals vs fitted
                rstandard(wormsimF.1.5.glm.single, type='deviance'), col='gray')
 
+wormsimF.1.5.glm.single.nested<-wormSimF.1.5 %>%
+  dplyr::filter(batch==1) %>%
+  glm(logCFU~unique_run, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.single.nested)
+lrtest(wormsimF.1.5.glm.single.nested, wormsimF.1.5.glm.single)
+#exp((315.85-322.99)/2) #AIC
+
+# next batch sizes: batch 5
 wormsimF.1.5.glm.batch5<-wormSimF.1.5 %>%
   dplyr::filter(batch==5) %>%
-  glm(logCFU~run*set, family=Gamma, data=.)
+  glm(logCFU~run+set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch5)
+wormsimF.1.5.glm.batch5.nested<-wormSimF.1.5 %>%
+  dplyr::filter(batch==5) %>%
+  #glm(logCFU~run, family=Gamma, data=.)
+  glm(logCFU~unique_run, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch5.nested)
+lrtest(wormsimF.1.5.glm.batch5.nested, wormsimF.1.5.glm.batch5)
+#exp((-122.21+118.35)/2)
 
+# batch 10
 wormsimF.1.5.glm.batch10<-wormSimF.1.5 %>%
   dplyr::filter(batch==10) %>%
-  glm(logCFU~run*set, family=Gamma, data=.)
+  glm(logCFU~run+set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch10)
+wormsimF.1.5.glm.batch10.nested<-wormSimF.1.5 %>%
+  dplyr::filter(batch==10) %>%
+#  glm(logCFU~run, family=Gamma, data=.)
+  glm(logCFU~unique_run, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch10.nested)
+lrtest(wormsimF.1.5.glm.batch10.nested, wormsimF.1.5.glm.batch10)
 
+# batch 20
 wormsimF.1.5.glm.batch20<-wormSimF.1.5 %>%
   dplyr::filter(batch==20) %>%
-  glm(logCFU~run*set, family=Gamma, data=.)
+  glm(logCFU~run+set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch20)
+wormsimF.1.5.glm.batch20.nested<-wormSimF.1.5 %>%
+  dplyr::filter(batch==20) %>%
+#  glm(logCFU~run, family=Gamma, data=.)
+  glm(logCFU~unique_run, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch20.nested)
+lrtest(wormsimF.1.5.glm.batch20.nested, wormsimF.1.5.glm.batch20)
 
+# batch 50
 wormsimF.1.5.glm.batch50<-wormSimF.1.5 %>%
   dplyr::filter(batch==50) %>%
-  glm(logCFU~run*set, family=Gamma, data=.)
+  glm(logCFU~run+set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch50)
+wormsimF.1.5.glm.batch50.nested<-wormSimF.1.5 %>%
+  dplyr::filter(batch==50) %>%
+#  glm(logCFU~run, family=Gamma, data=.)
+  glm(logCFU~unique_run, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch50.nested)
+lrtest(wormsimF.1.5.glm.batch50.nested, wormsimF.1.5.glm.batch50)
+exp((+578.2-582.23)/2)
 
 # and the symmetric data
 wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, reps=24, maxCFU=100000)
@@ -1350,12 +1391,50 @@ summary(wormSimF.1.5.12square.aov10)
 summary(wormSimF.1.5.12square.aov20)
 summary(wormSimF.1.5.12square.aov50)
 
+##  pull components from ANOVA summary table?
 wormSimF.1.5.12square.aov1.summary<-summary(wormSimF.1.5.12square.aov1)
-wormSimF.1.5.12square.aov1.summary[[1]]
+wormSimF.1.5.12square.aov1.summary[[1]] # the summary table
 wormSimF.1.5.12square.aov1.summary[[1]][,2] # SSEs
 wormSimF.1.5.12square.aov1.summary[[1]][,5] # P-vals
 
-# interesting. MSEs are very similar in batched
+# Likelihoods when we allow each run to be unique?
+wormSimF.1.5.12square<-wormSimF.1.5.12square %>%
+  mutate(unique_run=paste(set, run, sep="")) # this is actually a ton of parameters
+#wormSimF.1.5.12square$unique_run<-factor(wormSimF.1.5.12square$unique_run)
+#wormSimF.1.5.12square$set<-factor(wormSimF.1.5.12square$set)
+wormSimF.1.5.12square.aov50u<-wormSimF.1.5.12square %>% dplyr::filter(batch==50) %>% aov(logCFU~set, data=.)
+summary(wormSimF.1.5.12square.aov50u)
+wormSimF.1.5.12square.aov20u<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>% aov(logCFU~set, data=.)
+summary(wormSimF.1.5.12square.aov20u)
+logLik(wormSimF.1.5.12square.aov20)
+logLik(wormSimF.1.5.12square.aov20u)
+
+
+# comparing models - MSR ratio very near 1
+#lrtest(wormsimF.1.5.12square.aov5u, wormsimF.1.5.12square.aov5)
+#lrtest(wormsimF.1.5.12square.aov10u, wormsimF.1.5.12square.aov10)
+lrtest(wormSimF.1.5.12square.aov20, wormSimF.1.5.12square.aov20u)
+lrtest(wormSimF.1.5.12square.aov50, wormSimF.1.5.12square.aov50u)
+
+# with GLM?
+wormsimF.1.5.12square.glm20<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>%
+  glm(logCFU~run+set, family=Gamma, data=.)
+summary(wormsimF.1.5.12square.glm20)
+wormsimF.1.5.12square.glm20u<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>%
+  glm(logCFU~unique_run, family=Gamma, data=.)
+summary(wormsimF.1.5.12square.glm20u)
+logLik(wormsimF.1.5.12square.glm20)
+logLik(wormsimF.1.5.12square.glm20u)
+
+
+wormsimF.1.5.glm.batch50<-wormSimF.1.5 %>%
+  dplyr::filter(batch==50) %>%
+  glm(logCFU~run*set, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch50)
+
+
+  
+# interesting. MSEs for run and set are very similar in batched
 # see if this holds
 # variability is higher
 wormSimF.1.5.5square<-wormSimBatchBetaFactorial(a=1, b=5, reps=5, runs=5, maxCFU=100000)
@@ -1427,12 +1506,22 @@ wormSimF.1.5.RunRep.summary_wide %>%
 wormSimF.1.5.RunRep.summary_wide<-wormSimF.1.5.RunRep.summary_wide%>%
   mutate(MSE_ratio=MSE_Set/MSE_Run)
 
+# plot distributions of MSE ratio for Beta(1,5) vs Beta(1,5)
 wormSimF.1.5.RunRep.summary_wide %>%
   ggplot(aes(y=MSE_ratio, x=factor(n_reps), color=factor(batch)))+
   geom_boxplot()+
   scale_y_log10()+
   geom_hline(yintercept = 1)+
   facet_grid(~n_runs)
+
+wormSimF.1.5.RunRep.summary_wide %>%
+  ggplot(aes(x=log10(MSE_ratio), fill=factor(batch)))+
+  geom_histogram()+
+  #scale_y_log10()+
+  #geom_hline(yintercept = 1)+
+  facet_grid(vars(n_runs), vars(batch))
+
+
 
 # p values?
 wormSimF.1.5.RunRep.summary %>%
@@ -1537,8 +1626,8 @@ temp<-vector("list", length=length(batch_sizes)*length(factor_dim)* iter)
 idx<-1
 for (k in seq_len(iter)){
   for (i in seq_along(factor_dim)){ # loop along dimension of square factorial design
-    temp.square.A<-wormSimBatchBetaFactorial(a=1, b=5, reps=factor_dim[i], runs=factor_dim[i], maxCFU=100000)
-    temp.square.B<-wormSimBatchBetaFactorial(a=2, b=5, reps=factor_dim[i], runs=factor_dim[i], maxCFU=100000)
+    temp.square.A<-wormSimBatchBetaFactorial(a=1, b=5, runs=factor_dim[i],nbatches=factor_dim[i], maxCFU=100000)
+    temp.square.B<-wormSimBatchBetaFactorial(a=2, b=5, runs=factor_dim[i],nbatches=factor_dim[i], maxCFU=100000)
     temp.square.A <- temp.square.A %>%
       dplyr::filter(set=="A")
     temp.square.B <- temp.square.B %>%
@@ -1568,7 +1657,47 @@ for (k in seq_len(iter)){
   } # close wrap over factorial dimension
 } # close wrap over iterations
 
-# plot out
+# plot out data
+ggplot(temp.square, aes(x=factor(batch), y=logCFU))+geom_jitter(width=0.1)+facet_wrap(~set)
+
+# some tests
+temp.square.2beta.glm.batch1<-temp.square %>%
+  dplyr::filter(batch==1) %>%
+  glm(logCFU~run+set, family=Gamma, data=.)
+summary(temp.square.2beta.glm.batch1)
+
+temp.square.2beta.glm.batch5<-temp.square %>%
+  dplyr::filter(batch==5) %>%
+  glm(logCFU~run+set, family=Gamma, data=.)
+summary(temp.square.2beta.glm.batch5)
+temp.square.2beta.glm.batch5u<-temp.square %>%
+  dplyr::filter(batch==5) %>%
+  glm(logCFU~set, family=Gamma, data=.)
+summary(temp.square.2beta.glm.batch5u)
+lrtest(temp.square.2beta.glm.batch5, temp.square.2beta.glm.batch5u)
+
+temp.square.2beta.glm.batch10<-temp.square %>%
+  dplyr::filter(batch==10) %>%
+  glm(logCFU~run+set, family=Gamma, data=.)
+summary(temp.square.2beta.glm.batch10)
+temp.square.2beta.glm.batch10u<-temp.square %>%
+  dplyr::filter(batch==10) %>%
+  glm(logCFU~set, family=Gamma, data=.)
+summary(temp.square.2beta.glm.batch10u)
+lrtest(temp.square.2beta.glm.batch10, temp.square.2beta.glm.batch10u)
+
+temp.square.2beta.glm.batch20<-temp.square %>%
+  dplyr::filter(batch==20) %>%
+  glm(logCFU~run+set, family=Gamma, data=.)
+summary(temp.square.2beta.glm.batch20)
+temp.square.2beta.glm.batch20u<-temp.square %>%
+  dplyr::filter(batch==20) %>%
+  glm(logCFU~set, family=Gamma, data=.)
+summary(temp.square.2beta.glm.batch20u)
+lrtest(temp.square.2beta.glm.batch20, temp.square.2beta.glm.batch20u)
+
+
+# plot out summary
 wormSimF.TwoBeta.square.summary<-dplyr::bind_rows(temp)
 
 # p values
