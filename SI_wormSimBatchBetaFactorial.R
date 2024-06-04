@@ -47,7 +47,7 @@ wormSimBatchBetaFactorial<-function(a, b, runs = 4, nbatches=10, batch_sizes=c(1
         set=c(rep("A", nbatches), rep("B", nbatches)),
         FinalCount=c(tempA, tempB)
         )
-      print(c(i,k, idx)) #debug
+      #print(c(i,k, idx)) #debug
       idx<-idx+1 # shift position
       } # end loop over batch sizes
     } # end loop over runs
