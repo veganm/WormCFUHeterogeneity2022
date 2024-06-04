@@ -1,6 +1,6 @@
 #                Code for Supplementary Information
 
-pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, readxl, patchwork, sBIC)
+pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, readxl, patchwork, sBIC, lmtest)
 
 # Note that functions are in separate files
 # and that this code relies on data objects from the main text script (WormAveraging_MAIN.R)
@@ -980,31 +980,26 @@ wormSim3.1.5.s.data<-wormSim3.1.5.s$single_run # Separate the returned data
 wormSim3.1.5.s.summary<-wormSim3.1.5.s$data_summary
 rm(wormSim3.1.5.s)
 
-#wormSim3.1.5.m<-wormSimBatchBeta3(1,5,100000,200,24,1000)
 wormSim3.1.5.m<-wormSimBatchBeta3(a=1,b=5,nWorms=200, maxSamples=24, runs=1000)
 wormSim3.1.5.m.data<-wormSim3.1.5.m$single_run # Separate the returned data
 wormSim3.1.5.m.summary<-wormSim3.1.5.m$data_summary
 rm(wormSim3.1.5.m)
 
-#wormSim3.1.5.l<-wormSimBatchBeta3(1,5,100000,500,48,1000)
 wormSim3.1.5.l<-wormSimBatchBeta3(a=1,b=5,nWorms=500, maxSamples=24, runs=1000)
 wormSim3.1.5.l.data<-wormSim3.1.5.l$single_run # Separate the returned data
 wormSim3.1.5.l.summary<-wormSim3.1.5.l$data_summary
 rm(wormSim3.1.5.l)
 
-#wormSim3.5.5.s<-wormSimBatchBeta3(5,5,100000,100,12,1000)
 wormSim3.5.5.s<-wormSimBatchBeta3(a=5,b=5,nWorms=100, maxSamples=12, runs=1000)
 wormSim3.5.5.s.data<-wormSim3.5.5.s$single_run # Separate the returned data
 wormSim3.5.5.s.summary<-wormSim3.5.5.s$data_summary
 rm(wormSim3.5.5.s)
 
-#wormSim3.5.5.m<-wormSimBatchBeta3(5,5,100000,200,24,1000)
 wormSim3.5.5.m<-wormSimBatchBeta3(a=5,b=5,nWorms=200, maxSamples=24, runs=1000)
 wormSim3.5.5.m.data<-wormSim3.5.5.m$single_run # Separate the returned data
 wormSim3.5.5.m.summary<-wormSim3.5.5.m$data_summary
 rm(wormSim3.5.5.m)
 
-#wormSim3.5.5.l<-wormSimBatchBeta3(5,5,100000,500,48,1000)
 wormSim3.5.5.l<-wormSimBatchBeta3(a=5,b=5,nWorms=500, maxSamples=48, runs=1000)
 wormSim3.5.5.l.data<-wormSim3.5.5.l$single_run # Separate the returned data
 wormSim3.5.5.l.summary<-wormSim3.5.5.l$data_summary
@@ -1139,12 +1134,12 @@ ggsave("FigS8_pSimBatchBetaRand.5.5.meancompare3days.png", width=6, height=6, un
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ###########  What if we instead take the populations of means in regressions?
-wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, reps=24, maxCFU=100000)
+wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, runs=3, nbatches=24, maxCFU=100000)
 #glimpse(wormSimF.1.5)
-wormSimF.1.5<- wormSimF.1.5 %>%
-  mutate(unique_run=paste(set, run, sep=""))
+#wormSimF.1.5<- wormSimF.1.5 %>%
+#  mutate(unique_run=paste(set, run, sep=""))
 glimpse(wormSimF.1.5)
-wormSimF.1.5$unique_run<-as.factor(wormSimF.1.5$unique_run)
+#wormSimF.1.5$unique_run<-as.factor(wormSimF.1.5$unique_run)
 wormSimF.1.5$run<-as.factor(wormSimF.1.5$run)
 wormSimF.1.5 %>%
  ggplot(aes(x=factor(batch), y=logCFU, color=factor(run))) + 
@@ -1176,7 +1171,7 @@ scatter.smooth(predict(wormsimF.1.5.glm.single, type='response'), #residuals vs 
 
 wormsimF.1.5.glm.single.nested<-wormSimF.1.5 %>%
   dplyr::filter(batch==1) %>%
-  glm(logCFU~unique_run, family=Gamma, data=.)
+  glm(logCFU~set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.single.nested)
 lrtest(wormsimF.1.5.glm.single.nested, wormsimF.1.5.glm.single)
 #exp((315.85-322.99)/2) #AIC
@@ -1189,7 +1184,7 @@ summary(wormsimF.1.5.glm.batch5)
 wormsimF.1.5.glm.batch5.nested<-wormSimF.1.5 %>%
   dplyr::filter(batch==5) %>%
   #glm(logCFU~run, family=Gamma, data=.)
-  glm(logCFU~unique_run, family=Gamma, data=.)
+  glm(logCFU~run, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch5.nested)
 lrtest(wormsimF.1.5.glm.batch5.nested, wormsimF.1.5.glm.batch5)
 #exp((-122.21+118.35)/2)
@@ -1202,7 +1197,7 @@ summary(wormsimF.1.5.glm.batch10)
 wormsimF.1.5.glm.batch10.nested<-wormSimF.1.5 %>%
   dplyr::filter(batch==10) %>%
 #  glm(logCFU~run, family=Gamma, data=.)
-  glm(logCFU~unique_run, family=Gamma, data=.)
+  glm(logCFU~run, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch10.nested)
 lrtest(wormsimF.1.5.glm.batch10.nested, wormsimF.1.5.glm.batch10)
 
@@ -1213,8 +1208,8 @@ wormsimF.1.5.glm.batch20<-wormSimF.1.5 %>%
 summary(wormsimF.1.5.glm.batch20)
 wormsimF.1.5.glm.batch20.nested<-wormSimF.1.5 %>%
   dplyr::filter(batch==20) %>%
-#  glm(logCFU~run, family=Gamma, data=.)
-  glm(logCFU~unique_run, family=Gamma, data=.)
+  glm(logCFU~run, family=Gamma, data=.)
+#  glm(logCFU~unique_run, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch20.nested)
 lrtest(wormsimF.1.5.glm.batch20.nested, wormsimF.1.5.glm.batch20)
 
@@ -1225,14 +1220,15 @@ wormsimF.1.5.glm.batch50<-wormSimF.1.5 %>%
 summary(wormsimF.1.5.glm.batch50)
 wormsimF.1.5.glm.batch50.nested<-wormSimF.1.5 %>%
   dplyr::filter(batch==50) %>%
-#  glm(logCFU~run, family=Gamma, data=.)
-  glm(logCFU~unique_run, family=Gamma, data=.)
+  glm(logCFU~run, family=Gamma, data=.)
+#  glm(logCFU~unique_run, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch50.nested)
 lrtest(wormsimF.1.5.glm.batch50.nested, wormsimF.1.5.glm.batch50)
 exp((+578.2-582.23)/2)
 
-# and the symmetric data
-wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, reps=24, maxCFU=100000)
+####### and the symmetric data
+#wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, reps=24, maxCFU=100000)
+wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, runs=3, nbatches=24, maxCFU=100000)
 glimpse(wormSimF.5.5)
 wormSimF.5.5$run<-as.factor(wormSimF.5.5$run)
 wormSimF.5.5 %>%
