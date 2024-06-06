@@ -854,6 +854,7 @@ BootCombinations_SA_SE_cutoff_testsummary %>%
 ***
 ## Simulation-Based Thresholding: If You Do Not Have Individual-Based Data
 
+### If You Have Biologically Averaged Data for One Condition
 To assess run to run variation and false positive rates from batch-based data, you will again need data from at least two independent runs (not internal/technical replicates) of the same experiment. Ideally each run will contain a sufficient number of data points to allow reasonable bootstrapping; for worms, we strongly recommend a minimum sample size of 18 individuals.
 
 As individual-based data are unavailable, we cannot infer the distributions of individuals within each sample, and we therefore cannot directly simulate the effects of changing batch size. However, as simulations from individual-based data indicate that the distribution of rescaled mean distances should depend only weakly on batching, we can use that distribution to obtain a threshold value.
@@ -887,16 +888,16 @@ Boot2$Run<-as.factor("Run2")
 Boot3$Run<-as.factor("Run3")
 
 ## combine into a single object for easy plotting
-input_data<-rbind(Boot1, Boot2, Boot3) 
+input_data_batch<-rbind(Boot1, Boot2, Boot3) 
 
 correction_constant<-20
 ## and reverse FinalCount to get raw counts
-input_data$Count<-round(10^(log10(input_data$FinalCount/correction_constant) -input_data$D))
+input_data_batch$Count<-round(10^(log10(input_data_batch$FinalCount/correction_constant) -input_data_batch$D))
 ```
 
 If you are using your own data, read that in instead.
 ```{r}
-##input_data<-read_xlsx("input_data.xlsx")  ## replace with your data file
+##input_data_batch<-read_xlsx("input_data_batch.xlsx")  ## replace with your data file
 ```
 
 The bootstrapping functions expect count-based data with a particular structure. Each row of the data set represents one measurement, and the data should have columns: 
@@ -906,15 +907,16 @@ The bootstrapping functions expect count-based data with a particular structure.
   * D (num): Fold dilution at which counts were taken (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc) 
   * FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling. (This will be calculated if not present, if D is provided. Otherwise an error is returned.)
   
-Let's make sure the data structure is OK before proceeding.
+Let's make sure the data structure is OK before proceeding. In this case, we should have three runs' worth of data, all from batches of 5 individuals per data point.
 ```{r}
-glimpse(input_data) ## take a quick look at the data object contents and confirm column names are OK
+glimpse(input_data_batch) ## take a quick look at the data object contents and confirm column names are OK
+view(input_data_batch) # show the whole data frame in a new tab
 ```
 
 And as always it is a good idea to plot out to make sure the data look ok:
 ```{r}
 ## easy plotting
-input_data %>%
+input_data_batch %>%
 	ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + 
 	geom_jitter(shape=16, position=position_jitter(0.05)) +
 	geom_violin(fill=NA) + 
@@ -934,17 +936,17 @@ input_data %>%
 	  legend.text = element_text(size=xTextSize-1)
 	  )+
   labs(title="Batch Data", 
-       y=expression(log[10]("Total Count")), x="Run")
+       y=expression(log[10]("Count Per Individual")), x="Run")
 ```
 
-The function used for bootstrapping individual-based data in the previous section will also bootstrap batch-based data from raw counts and dilution series information, again assuming sampling noise on counts.
+The function used for bootstrapping individual-based data in the previous section will also bootstrap batch-based data from raw counts and dilution series information, again assuming sampling noise on counts. However, since the variances of the individual data are not known, in this case we can only simulate bootstrap distributions with the same amount of biological averaging as in the data.
 ```{r}
 ## Carries out nboot simulations and stores
-BootCombinations_batch<-bootOnCountsStats(input_data=input_data, nboot=1000, 
+BootCombinations_batch<-bootOnCountsStats(input_data=input_data_batch, nboot=1000, 
                                       FoldD=10, correction_constant=20)
 ## If you want more human-interpretable run IDs, they must be added after the bootstrap
-BootCombinations_batch$Run1ID<-paste("Run", BootCombinations_batch5$Run1, sep=" ")
-BootCombinations_batch$Run2ID<-paste("Run", BootCombinations_batch5$Run2, sep=" ")
+BootCombinations_batch$Run1ID<-paste("Run", BootCombinations_batch$Run1, sep=" ")
+BootCombinations_batch$Run2ID<-paste("Run", BootCombinations_batch$Run2, sep=" ")
 
 ## look at contents
 glimpse(BootCombinations_batch)
@@ -1007,7 +1009,7 @@ BootCombinations_batch <- BootCombinations_batch %>%
 ```
 
 And plot out:
-```{r}
+```{r fig.width=10}
 my.labs<-c("Mean CFU", "Cohen's D", "CV", "Q1", "Q2")
 names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist","Q2dist")
 BootCombinations_batch %>%
@@ -1027,8 +1029,6 @@ BootCombinations_batch %>%
   labs(title="", y="Distance between pairs", x="Batch Size")+
   facet_wrap(vars(Var), scales="free", nrow=1, labeller=labeller(Var=my.labs))
 ```
-
-Note that while the distribution of rescaled distances between means is relatively unaffected by batching except in the tails, Cohen's D (variance-normalized mean distance) and distances in the coefficient of variation (CV) and in Q1 (quantile-based measure of skewness) are strongly affected by batching, consistent with the observed increase in false-positive pairwise comparisons.
 
 We can get exact numbers from the quantiles of the distribution of mean distances:
 ```{r}
@@ -1087,4 +1087,5 @@ BootCombinations_batch_cutoff_testsummary %>%
 ```
 
 
-## Comparing Within- and Between-Group Variance From Uniformly Weighted Factorial Experimental Data
+## If You Have Biologically Averaged Data In A Factorial Design With More Than One Condition: Comparing Within- and Between-Group Variance
+
