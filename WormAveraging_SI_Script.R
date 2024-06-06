@@ -1140,7 +1140,7 @@ wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, runs=3, nbatches=24, maxCFU=10
 #  mutate(unique_run=paste(set, run, sep=""))
 glimpse(wormSimF.1.5)
 #wormSimF.1.5$unique_run<-as.factor(wormSimF.1.5$unique_run)
-wormSimF.1.5$run<-as.factor(wormSimF.1.5$run)
+wormSimF.1.5$run<-as.character(wormSimF.1.5$run)
 wormSimF.1.5 %>%
  ggplot(aes(x=factor(batch), y=logCFU, color=factor(run))) + 
   geom_violin(fill=NA) + 
@@ -1173,8 +1173,17 @@ wormsimF.1.5.glm.single.nested<-wormSimF.1.5 %>%
   dplyr::filter(batch==1) %>%
   glm(logCFU~set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.single.nested)
-lrtest(wormsimF.1.5.glm.single.nested, wormsimF.1.5.glm.single)
-#exp((315.85-322.99)/2) #AIC
+lrtest(wormsimF.1.5.glm.single, wormsimF.1.5.glm.single.nested)
+wormsimF.1.5.glm.single.lrt<-lrtest(wormsimF.1.5.glm.single, wormsimF.1.5.glm.single.nested)
+wormsimF.1.5.glm.single.lrt$`Pr(>Chisq)`[2]  # obtain p value
+exp((AIC(wormsimF.1.5.glm.single)-AIC(wormsimF.1.5.glm.single.nested))/2)
+
+wormsimF.1.5.glm.single.unique<-wormSimF.1.5 %>%
+  dplyr::filter(batch==1) %>%
+  mutate(unique_replicate=paste(set, run, sep="")) %>%
+  glm(logCFU~unique_replicate, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.single.unique)
+exp((AIC(wormsimF.1.5.glm.single)-AIC(wormsimF.1.5.glm.single.unique))/2)
 
 # next batch sizes: batch 5
 wormsimF.1.5.glm.batch5<-wormSimF.1.5 %>%
@@ -1187,7 +1196,13 @@ wormsimF.1.5.glm.batch5.nested<-wormSimF.1.5 %>%
   glm(logCFU~run, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch5.nested)
 lrtest(wormsimF.1.5.glm.batch5.nested, wormsimF.1.5.glm.batch5)
-#exp((-122.21+118.35)/2)
+exp((AIC(wormsimF.1.5.glm.batch5)-AIC(wormsimF.1.5.glm.batch5.nested))/2)
+wormsimF.1.5.glm.batch5.unique<-wormSimF.1.5 %>%
+  dplyr::filter(batch==5) %>%
+  mutate(unique_replicate=paste(set, run, sep="")) %>%
+  glm(logCFU~unique_replicate, family=Gamma, data=.)
+summary(wormsimF.1.5.glm.batch5.unique)
+exp((AIC(wormsimF.1.5.glm.batch5)-AIC(wormsimF.1.5.glm.batch5.unique))/2)
 
 # batch 10
 wormsimF.1.5.glm.batch10<-wormSimF.1.5 %>%
@@ -1200,6 +1215,7 @@ wormsimF.1.5.glm.batch10.nested<-wormSimF.1.5 %>%
   glm(logCFU~run, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch10.nested)
 lrtest(wormsimF.1.5.glm.batch10.nested, wormsimF.1.5.glm.batch10)
+exp((AIC(wormsimF.1.5.glm.batch10)-AIC(wormsimF.1.5.glm.batch10.nested))/2)
 
 # batch 20
 wormsimF.1.5.glm.batch20<-wormSimF.1.5 %>%
@@ -1212,6 +1228,7 @@ wormsimF.1.5.glm.batch20.nested<-wormSimF.1.5 %>%
 #  glm(logCFU~unique_run, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.batch20.nested)
 lrtest(wormsimF.1.5.glm.batch20.nested, wormsimF.1.5.glm.batch20)
+exp((AIC(wormsimF.1.5.glm.batch20)-AIC(wormsimF.1.5.glm.batch20.nested))/2)
 
 # batch 50
 wormsimF.1.5.glm.batch50<-wormSimF.1.5 %>%
@@ -1225,6 +1242,126 @@ wormsimF.1.5.glm.batch50.nested<-wormSimF.1.5 %>%
 summary(wormsimF.1.5.glm.batch50.nested)
 lrtest(wormsimF.1.5.glm.batch50.nested, wormsimF.1.5.glm.batch50)
 exp((+578.2-582.23)/2)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~
+## try this in simulations. Does the LRT help?
+wormSimBatchBeta.1.5.100runs<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=24, runs=100, reps=3)
+#glimpse(wormSimBatchBeta.1.5.100runs)  
+wormSimBatchBeta.1.5.100runs.summary<-wormSimBatchBeta.1.5.100runs$data_summary
+wormSimBatchBeta.1.5.100runs.single<-wormSimBatchBeta.1.5.100runs$single_run
+rm(wormSimBatchBeta.1.5.100runs)
+#glimpse(wormSimBatchBeta.1.5.100runs.summary)  
+
+#check values
+wormSimBatchBeta.1.5.100runs.summary %>%
+  ggplot(aes(x=log10(p.glm.AICu)))+
+  geom_histogram()+
+  facet_wrap(~batch)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## a function to summarize test results 
+SimBatchBetaSummaryCorrected<-function(input_data, alpha=0.05, alpha_AIC=0.5){
+  # takes the data_summary output from wormSimBatchBeta3
+  # and summarizes false positive rates
+  input_data <- input_data %>%
+    mutate(isSig_t=as.integer(as.logical(p.t<0.05)),
+           isSig_w=as.integer(as.logical(p.w<0.05)),
+           isSig_glm=as.integer(as.logical(p.glm<0.05)),
+           isSig_lrt=as.integer(as.logical(p.glm.lrt<0.05)),
+           isSig_glm_lrt=as.integer(as.logical(p.glm<0.05 & p.glm.lrt<0.05)),
+           isSig_glm_AIC=as.integer(as.logical(p.glm<0.05 & p.glm.AIC<0.5)),
+           isSig_glm_AICu=as.integer(as.logical(p.glm<0.05 & p.glm.AICu<0.5)),
+           isSig_aov=as.integer(as.logical(p.aov<0.05))
+    )
+  input_data_testsummary<-input_data %>%
+    group_by(dist, batch) %>%
+    summarize(countSigT=sum(isSig_t),
+              countSigW=sum(isSig_w),
+              countSigGLM=sum(isSig_glm),
+              countSigGLMLRT=sum(isSig_glm_lrt),
+              countSigGLMAIC=sum(isSig_glm_AIC),
+              countSigGLMAICu=sum(isSig_glm_AICu),
+              countSigAOV=sum(isSig_aov),
+              n=n()) %>%
+    mutate(fracSigT=countSigT/n,
+           fracSigW=countSigW/n,
+           fracSigGLM=countSigGLM/n,
+           fracSigGLMLRT=countSigGLMLRT/n,
+           fracSigGLMAIC=countSigGLMAIC/n,
+           fracSigGLMAICu=countSigGLMAICu/n,
+           fracSigAOV=countSigAOV/n,
+    ) %>%
+    ungroup() %>%
+    dplyr::select(dist, batch, fracSigT, fracSigW, fracSigGLM,
+                  fracSigGLMLRT, fracSigGLMAIC, fracSigGLMAICu, fracSigAOV) %>%
+    pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+                 names_prefix = "fracSig", values_to = "fracSig")
+  return(input_data_testsummary)
+}
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# summarize
+wormSimBatchBeta.1.5.100runs_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.summary)
+# did using LRT help with false positives? kinda!
+wormSimBatchBeta.1.5.100runs_testsummary %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Test Results, Beta(1,5), 3 replicates")
+
+## what if we increase the number of replicates?
+wormSimBatchBeta.1.5.100runs.6reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=24, runs=100, reps=6)
+wormSimBatchBeta.1.5.100runs.6reps.summary<-wormSimBatchBeta.1.5.100runs.6reps$data_summary
+wormSimBatchBeta.1.5.100runs.6reps.single<-wormSimBatchBeta.1.5.100runs.6reps$single_run
+rm(wormSimBatchBeta.1.5.100runs.6reps)
+
+# summarize test results for Beta(1,5)
+wormSimBatchBeta.1.5.100runs.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.6reps.summary)
+# did using LRT help with false positives? kinda!
+wormSimBatchBeta.1.5.100runs.6reps_testsummary %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Test Results, Beta(1,5), 6 replicates")
+
+# even more replicates?
+## what if we increase the number of replicates?
+wormSimBatchBeta.1.5.100runs.12reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=24, runs=100, reps=12)
+#glimpse(wormSimBatchBeta.1.5.100runs.12reps)  
+wormSimBatchBeta.1.5.100runs.12reps.summary<-wormSimBatchBeta.1.5.100runs.12reps$data_summary
+wormSimBatchBeta.1.5.100runs.12reps.single<-wormSimBatchBeta.1.5.100runs.12reps$single_run
+rm(wormSimBatchBeta.1.5.100runs.12reps)
+#glimpse(wormSimBatchBeta.1.5.100runs.12reps.summary)  
+
+# summarize test results for Beta(1,5)
+wormSimBatchBeta.1.5.100runs.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.12reps.summary)
+
+# did using LRT help with false positives? not anymore. Too many df in replicates.
+wormSimBatchBeta.1.5.100runs.12reps_testsummary %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  #scale_fill_manual(labels = c("t-test", "Wilcoxon"), values = c("blue", "red")) +
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Test Results, Beta(1,5), 12 replicates")
+
 
 ####### and the symmetric data
 #wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, reps=24, maxCFU=100000)
@@ -1247,23 +1384,63 @@ wormSimF.5.5 %>%
        y=expression(log[10](Bacteria)),
        color="Replicate")
 
+## try this in simulations. Does the LRT help?
+wormSimBatchBeta.5.5.100runs<-wormSimBatchBeta3(a=1, b=5, nWorms=2000, maxSamples=24, runs=100, reps=3)
+#glimpse(wormSimBatchBeta.5.5.100runs)  
+wormSimBatchBeta.5.5.100runs.summary<-wormSimBatchBeta.5.5.100runs$data_summary
+wormSimBatchBeta.5.5.100runs.single<-wormSimBatchBeta.5.5.100runs$single_run
+rm(wormSimBatchBeta.5.5.100runs)
+#glimpse(wormSimBatchBeta.5.5.100runs.summary)  
 
-# Compare glm and Wilcoxon false positives
-# with three runs as above
-# here we use enough worms to allow 24 batches even at 50 worms
-wormSim3.5.5.m.means<-wormSimBatchBeta3(5,5,100000,1200,24,1000)
-wormSim3.5.5.m.means$batch<-as.factor(wormSim3.5.5.m.means$batch)
-# Wilcoxon p-values
-#[1] 0.096 0.232 0.372 0.461 0.592
-# glm p-values for runB term
-#[1] 0.108 0.282 0.368 0.500 0.641
+# summarize test results for Beta(1,5)
+wormSimBatchBeta.5.5.100runs.summary <- wormSimBatchBeta.5.5.100runs.summary %>%
+  mutate(isSig_t=as.integer(as.logical(p.t<0.05)),
+         isSig_w=as.integer(as.logical(p.w<0.05)),
+         isSig_glm=as.integer(as.logical(p.glm<0.05)),
+         isSig_glm_lrt=as.integer(as.logical(p.glm<0.05 & p.glm.lrt<0.05)),
+         isSig_glm_AIC=as.integer(as.logical(p.glm<0.05 & p.glm.AIC<0.5)),
+         isSig_glm_AICu=as.integer(as.logical(p.glm<0.05 & p.glm.AICu<0.5)),
+         isSig_aov=as.integer(as.logical(p.aov<0.05))
+  )
+#glimpse(wormSimBatchBeta.5.5.100runs.summary)
 
-wormSim3.1.5.m.means<-wormSimBatchBeta3(1,5,100000,1200,24,1000)
-wormSim3.1.5.m.means$batch<-as.factor(wormSim3.1.5.m.means$batch)
-# Wilcoxon
-#0.061 0.120 0.199 0.310 0.449
-# glm
-# 0.044 0.114 0.230 0.335 0.492
+wormSimBatchBeta.5.5.100runs_testsummary<-wormSimBatchBeta.5.5.100runs.summary %>%
+  group_by(dist, batch) %>%
+  summarize(countSigT=sum(isSig_t),
+            countSigW=sum(isSig_w),
+            countSigGLM=sum(isSig_glm),
+            countSigGLMLRT=sum(isSig_glm_lrt),
+            countSigGLMAIC=sum(isSig_glm_AIC),
+            countSigGLMAICu=sum(isSig_glm_AICu),
+            countSigAOV=sum(isSig_aov),
+            n=n()) %>%
+  mutate(fracSigT=countSigT/n,
+         fracSigW=countSigW/n,
+         fracSigGLM=countSigGLM/n,
+         fracSigGLMLRT=countSigGLMLRT/n,
+         fracSigGLMAIC=countSigGLMAIC/n,
+         fracSigGLMAICu=countSigGLMAICu/n,
+         fracSigAOV=countSigAOV/n,
+  ) %>%
+  ungroup() %>%
+  dplyr::select(dist, batch, fracSigT, fracSigW, fracSigGLM,
+                fracSigGLMLRT, fracSigGLMAIC, fracSigGLMAICu, fracSigAOV) %>%
+  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+               names_prefix = "fracSig", values_to = "fracSig")
+
+# did using LRT help with false positives? kinda!
+wormSimBatchBeta.5.5.100runs_testsummary %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Test Results, Beta(5,5)")
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # summarize the simulated factorial data
@@ -1313,63 +1490,15 @@ wormSimF.summary %>%
   geom_jitter(width=1)+
   scale_y_log10()
 
-# messing with distributions of effort
-tempF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, runs=5, reps=10, maxCFU=100000)
-tempF.1.5$run<-as.factor(tempF.1.5$run)
-tempF.1.5.summary<-tempF.1.5 %>%
-  group_by(set, batch, run) %>%
-  summarize(meanCFU=mean(CFU, na.rm=TRUE),
-            varCFU=var(CFU, na.rm=TRUE),
-            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
-            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
-            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
-            n=n()
-  )
-tempF.1.5.summary$Distribution<-"Beta(1,5)"
-
-tempF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, runs=5, reps=10, maxCFU=100000)
-tempF.5.5$run<-as.factor(tempF.5.5$run)
-tempF.5.5.summary<-tempF.5.5 %>%
-  group_by(set, batch, run) %>%
-  summarize(meanCFU=mean(CFU, na.rm=TRUE),
-            varCFU=var(CFU, na.rm=TRUE),
-            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
-            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
-            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
-            n=n()
-  )
-tempF.5.5.summary$Distribution<-"Beta(5,5)"
-tempF.summary<-rbind(tempF.1.5.summary, tempF.5.5.summary)
-tempF.summary %>%
-  ggplot(aes(x=batch, y=varCFU, color=factor(Distribution)))+
-  geom_jitter(width=1)+
-  scale_y_log10()
-
-# Plot the average CFU within each experiment and set
-tempF.summary %>%
+wormSimF.summary %>%
   ggplot(aes(x=batch, y=meanCFU, color=factor(Distribution)))+
   geom_jitter(width=1)+
   scale_y_log10()
 
-#~~~~~~~~~~~~~~~~~~~~~~~
-# some ANOVAs
-wormSimF.1.5.aov10<-wormSimF.1.5 %>%
-  dplyr::filter(batch==10)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.aov10)
-hist(wormSimF.1.5.aov10$residuals) # quick check - design is even, so should be ok
-
-wormSimF.1.5.aov20<-wormSimF.1.5 %>%
-  dplyr::filter(batch==20)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.aov20)
-hist(wormSimF.1.5.aov20$residuals) # quick check - design is even, so should be ok
-
-wormSimF.1.5.aov50<-wormSimF.1.5 %>%
-  dplyr::filter(batch==50)%>%
-  aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.aov50)
-hist(wormSimF.1.5.aov50$residuals) # quick check - design is even, so should be ok
+wormSimF.summary %>%
+  ggplot(aes(x=batch, y=medianCFU, color=factor(Distribution)))+
+  geom_jitter(width=1)+
+  scale_y_log10()
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ###  again with a different number of runs to check the biological variances
