@@ -68,6 +68,8 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
       mydata$logCFU[mydata$logCFU<0]<-1
       #print(min(mydata$logCFU)) # debug
       
+      mydata$replicate<-as.character(mydata$replicate) # make sure replicate is an index, not a number
+      
       if(i==runs){#if this is the last run
         #print(i) # debug
         single_run[[k]]<-mydata
@@ -79,10 +81,16 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
       wtest1<-wilcox.test(tempA, tempB, exact=FALSE)
       
       # glm significance for "set"
-      #glimpse(mydata) # debug
-      #print(min(mydata$logCFU)) # debug
-      myglm.single<-mydata %>%
-        glm(logCFU~replicate*set, family=Gamma, data=.)
+      myglm<-mydata %>%
+        glm(logCFU~replicate+set, family=Gamma, data=.)
+      myglm.nested<-mydata %>%
+        glm(logCFU~set, family=Gamma, data=.)
+      myglm.unique<-mydata %>%
+        mutate(unique_replicate=paste(set, replicate, sep="")) %>%
+        glm(logCFU~unique_replicate, family=Gamma, data=.)
+     myglm.lrt<-lrtest(myglm, myglm.nested)
+     #print(AIC(myglm)) # debug
+     #print(AIC(myglm.unique)) # debug
       
       # ANOVA
       my.aov<-aov(logCFU~replicate+set, data=mydata)
@@ -109,7 +117,10 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
         kurt_B=kurtosis(tempB,na.rm=TRUE),
         p.t=ttest1$p.value,
         p.w=wtest1$p.value,
-        p.glm=coef(summary(myglm.single))["setB",4],
+        p.glm=coef(summary(myglm))["setB",4], # obtain p values
+        p.glm.lrt=myglm.lrt$`Pr(>Chisq)`[2],
+        p.glm.AIC=exp((AIC(myglm)-AIC(myglm.nested))/2),
+        p.glm.AICu=exp((AIC(myglm.unique)-AIC(myglm))/2),
         p.aov=summary(my.aov)[[1]][2,5]
       )
       idx<-idx+1
