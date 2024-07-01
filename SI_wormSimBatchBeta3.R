@@ -1,5 +1,5 @@
-wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=c(1,5,10,20,50),
-                            maxCFU=1e5, prange=0.1, sameParams=FALSE){
+wormSimBatchBeta3<-function(a, b, a_alt=1, b_alt=1, nWorms, maxSamples, runs, reps=3, batch_sizes=c(1,5,10,20,50),
+                            maxCFU=1e5, prange=0.1, sameParams=TRUE){
   #Function that generates beta-distributed "worm CFU counts" with replicate days (default reps=3)
   #a and b are the parameters of the beta distribution
   #maxCFU is the scaling factor used to turn beta values to CFUs
@@ -9,8 +9,8 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
   #runs is the number of times to run the simulation
   #prange is the width of the uniform noise on beta parameters
   #   If sameparams=FALSE (default), two data sets A and B will be instantiated
-  #   with different parameter draws
-  #   Otherwise, A and B have the same parameters within a replicate
+  #   with data set B using base parameters (a_alt, b_alt)
+  #   Otherwise, A and B have the same base parameters (a, b) within a replicate
   # Returns a list containing summaries of all runs and the most recent run of simulated data
   
   # needs
@@ -36,13 +36,12 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
         temp2<-numeric(length=nbatches)  
         a1<-a*(1+runif(1, min=-prange, max=prange))  # note there are always new parameters across replicates
         b1<-b*(1+runif(1, min=-prange, max=prange))
-        if(sameParams){ # instantiate new randomized parameters for set B?
-          a2<-a1
-          b2<-b1
-        }else {
-          a2<-a*(1+runif(1, min=-prange, max=prange))
-          b2<-b*(1+runif(1, min=-prange, max=prange))
-        } # end sameParams loop
+        if(sameParams){ # instantiate new parameters for set B?
+          a_alt<-a
+          b_alt<-b
+        }
+        a2<-a_alt*(1+runif(1, min=-prange, max=prange))
+        b2<-b_alt*(1+runif(1, min=-prange, max=prange))
       
         for (m in seq_len(nbatches)){ # make individual data points
           temp1[m]<-mean(rbeta(batch_sizes[k], a1, b1)*maxCFU, na.rm=TRUE)
@@ -57,12 +56,13 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
       #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       # construct raw data for this run
       mydata<-tibble(
-        dist=paste("Beta(", a, ",", b, ")", sep=""),
-        batch=batch_sizes[k],
-        set=c(rep("A", nbatches*reps), rep("B", nbatches*reps)),
-        replicate=c(repA, repB),
-        FinalCount=c(tempA, tempB)
-      )
+          dist=c(rep(paste("Beta(", a, ",", b, ")", sep=""), nbatches*reps),
+                 rep(paste("Beta(", a_alt, ",", b_alt, ")", sep=""),nbatches*reps)),
+          batch=batch_sizes[k],
+          set=c(rep("A", nbatches*reps), rep("B", nbatches*reps)),
+          replicate=c(repA, repB),
+          FinalCount=c(tempA, tempB)
+        )
       mydata$logCFU<-log10(mydata$FinalCount)    # create & correct log final counts
       mydata$logCFU[!is.finite(mydata$logCFU)]<-1
       mydata$logCFU[mydata$logCFU<0]<-1
@@ -98,6 +98,7 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
       # store summary stats
       temp[[idx]]<-tibble(
         dist=paste("Beta(", a, ",", b, ")", sep=""),
+        distB=paste("Beta(", a_alt, ",", b_alt, ")", sep=""),
         Run=i,
         nreps=reps,
         batch=batch_sizes[k],
@@ -143,3 +144,4 @@ wormSimBatchBeta3<-function(a, b, nWorms, maxSamples, runs, reps=3, batch_sizes=
 
   return(my_list)
 }
+
