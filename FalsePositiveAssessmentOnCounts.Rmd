@@ -13,14 +13,14 @@ This code was written in R 4.4.0 running in Rstudio 2024.04.0 build 735.
 Before we do anything, we will need to load the packages this code depends on. Here we load the required packages, using PACkageMANager to install any that are missing.
 ```{r}
 ##install.packages("pacman") ## Uncomment and run if pacman is not already installed
-pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, readxl, patchwork, sBIC)
-## and place a global
+pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, readxl, patchwork, sBIC, lmtest)
+## and create a global variable
 xTextSize<-14
 ```
 
 Now we will create some functions that will be needed below. Make sure to run these code blocks before proceeding to the next section.  
 
-The *bootOnCounts()* function provides the basic functionality to boostrap on raw count data, which may or may not be from serially diluted samples:
+The *bootOnCounts()* function provides the basic functionality to bootstrap on raw count data, which may or may not be from serially diluted samples:
 ```{r}
 bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), FoldD=10, correction_constant=20){
   ## Expects a number of replicates for the bootstrap (n_reps)
@@ -61,16 +61,17 @@ bootOnCounts<-function(n_reps, mydata, batch_sizes=c(1,5,10,20,50), FoldD=10, co
   
   ## unfold data
   dataSet<-dplyr::bind_rows(temp) ## unpack
-  
+  dataSet$FinalCount[dataSet$FinalCount<1]<-1
   dataSet<-dataSet %>%
     mutate(logCFU=log10(FinalCount))
-  if (sum(is.infinite(dataSet$logCFU))>0){dataSet$logCFU[is.infinite(dataSet$logCFU)]<-0}
+  if (sum(is.infinite(dataSet$logCFU))>0){dataSet$logCFU[is.infinite(dataSet$logCFU)]<-0.1}
+  dataSet$logCFU[dataSet$logCFU<0]<-0.1
   
   return(dataSet)
 }
 ```
 
-The *bootOnCountsStats()* function does the heavy lifting on the bootstrap. Note that the function will technically accept batch-based data, but the stability of this code for non-uniformly weighted batches has not been tested.
+The *bootOnCountsStats()* function does the heavy lifting on the bootstraps that will be run in this script. Note that the function will technically accept batch-based data, but the stability of this code for non-uniformly weighted batches has not been tested.
 ```{r}
 bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
                             FoldD=10, correction_constant=20){
@@ -79,17 +80,23 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   ## If this is true, results will indicate run-to-run variation and estimated false-positive rates
   ## Calls bootOnCounts() for basic functionality.
   ## 
-  ## IF A DATA SET OF INDIVIDUAL-BASED DATA IS PROVIDED
+  ## IF A DATA SET OF INDIVIDUAL-BASED DATA FOR ONE EXPERIMENTAL CONDITION IS PROVIDED
   ##   - The data set must contain at least two runs of data, ideally with 18+ data points in each
   ##   - Function assumes no subsampling (each individual is essentially a unit-1 subsample)
   ##   - Generates resampled data plus Poisson noise for individual and batch-based measurements
   ##   - Returns data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at each batch size
   ##
-  ## IF A DATA SET OF BATCH-BASED DATA IS PROVIDED
+  ## IF A DATA SET OF BATCH-BASED DATA FOR ONE EXPERIMENTAL CONDITION IS PROVIDED
   ##   - The data set must contain at least two runs of data, ideally with 18+ data points in each
   ##   - Generates resampled data plus Poisson noise using the indicated weighting from input data
-  ##   - Returns data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at each batch size
+  ##   - Returns data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at the batch size in data
   ## 
+  ## IF A DATA SET REPRESENTING MORE THAN ONE EXPERIMENTAL CONDITION IS PROVIDED
+  ##   - The data set must be as already described
+  ##   - Returns a list containing two objects
+  ##      * data_summary: Data statistics and t-test and Wilcoxon results of nboot resamples for each pair of samples at each batch size
+  ##      * regression_summary: Statistics of glm and ANOVAs for each pair of experimental conditions
+  ##
   ## Takes a data set with columns
   ##   Run (num): Each unique index represents one data set
   ##   Count (num): Number of raw counts associated with each sample
@@ -99,6 +106,8 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   ##         (e.g. D=0 indicates undiluted sample; D=1 indicates the first FoldD-fold dilution; etc)
   ##   FinalCount (num, optional): Total inferred counts, based on raw counts and adjusted for dilution and sampling.
   ##         Will be calculated if not present.
+  ##   Condition (chr, optional): Experimental condition. 
+  ##          Will not be used unless data set contains more than one unique value for Condition.
   ## Each row of the data set represents one measurement.
   ## 
   ## Other inputs:
@@ -127,45 +136,93 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
   } 
   ## now we should have final counts
   
-  ## Are data individual or batch-based?
-  isIndividual<-max(input_data$Batch) == 1
+  
+  ## How many experimental conditions are in the data set?
+  condition_list<-unique(input_data$Condition)
+  n_conditions<-length(condition_list)
   
   ## How many runs of data are in the input data set?
-  run_ids<-unique(input_data$Run)
+  input_data$RunID<-paste(input_data$Condition, input_data$Run, sep="")
+  run_ids<-unique(input_data$RunID)
   n_runs<-length(run_ids)
   if(n_runs<2){
     stop("At least two runs of data are required for bootstrapping.")
   }
   
-  ## initiate looping index
-  idx<-1
+  ## Are data individual or batch-based?
+  isIndividual<-max(input_data$Batch) == 1
+
+    # Correct batching if batch data are supplied
+  if (!isIndividual){  #### For batch-based data
+    batch_sizes<-max(input_data$Batch) # this should return a scalar - only one "batch size" in data
+    }
+
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  ## Someplace to put the data generated
+  ###  Temporary list object for summary statistics of pairs
+  temp<-vector("list", length=length(batch_sizes)*factorial(n_runs)*nboot)
+  ### Temporary data storage for regressions and regression stats if data have replicates
+  if(n_conditions>1){
+    temp_data<-vector("list", length=n_runs) #Assemble bootstrapped replicates, including one of each unique replicate (x) condition
+    temp_reg<-vector("list", length=nboot*length(batch_sizes)) # at the end of a boot, do comparisons on replicate-structured data
+  }
   
-  if (isIndividual){  #### For individual-based data
-    ## Someplace to put the data generated
-    temp<-vector("list", length=length(batch_sizes)*n_runs*n_runs*nboot)
-    
-    for (m in seq_len(nboot)){  
-      for (i in seq_len(n_runs)){
-        for (j in seq_len(n_runs)){ ## For each pair of runs
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Start bootstrap loop    
+  
+  idx<-1  ## initiate looping index
+  idx_set<-1
+  for (m in seq_len(nboot)){  
+    idx_pair<-1  # index for combining data sets within boot
+    for (i in seq_len(n_runs)){
+        for (j in i:n_runs){ ## For each pair of runs
             ## Obtain two sets of data from the input
             temp1<-input_data %>%
-              dplyr::filter(Run==run_ids[i])
+              dplyr::filter(RunID==run_ids[i])
             temp2<-input_data %>%
-              dplyr::filter(Run==run_ids[j])
+              dplyr::filter(RunID==run_ids[j])
             
             ## Bootstrap both sets
             n1<-dim(temp1)[1]
             n2<-dim(temp2)[1]
-            Boot1<-bootOnCounts(n_reps=n1, mydata=temp1, 
-                                batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
-            Boot2<-bootOnCounts(n_reps=n2, mydata=temp2, 
-                                batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
+            
+            if(isIndividual){ # can use bootOnCounts() to bootstrap individual-based data
+              Boot1<-bootOnCounts(n_reps=n1, mydata=temp1, 
+                                  batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
+              Boot2<-bootOnCounts(n_reps=n2, mydata=temp2, 
+                                  batch_sizes=batch_sizes, FoldD=FoldD, correction_constant = correction_constant)
+            } else{ # but batched data can't be extrapolated to other batch sizes
+              ## Resamples with batch weights from data
+              idx1<-sample(1:n1,n1,replace=TRUE)
+              idx2<-sample(1:n2,n2,replace=TRUE)
+              ## Assume Poisson count error and generate new counts
+              temp_count_1<-rpois(n1, temp1$Count[idx1])
+              temp_count_2<-rpois(n2, temp2$Count[idx2])
+              ## Calculate biologically averaged total counts for resampled data
+              Boot1counts<-sort((correction_constant*temp_count_1*FoldD^temp1$D[idx1])/temp1$Batch)
+              Boot2counts<-sort((correction_constant*temp_count_2*FoldD^temp2$D[idx2])/temp2$Batch)
+              # correct for any inadmissible values
+              Boot1counts[Boot1counts<1]<-1
+              Boot2counts[Boot2counts<1]<-1
+              # assemble into objects with the same format as bootOnCounts() output
+              Boot1<-tibble(Batch=batch_sizes,  # just so loop on batch_sizes works properly
+                            FinalCount=Boot1counts,
+                            logCFU=log10(Boot1counts)
+                            )
+              Boot2<-tibble(Batch=batch_sizes, # just so loop on batch_sizes works properly
+                            FinalCount=Boot2counts,
+                            logCFU=log10(Boot2counts)
+                            )
+            } # end conditional generation of bootstrapped data
                       
             ## fix any zeros thrown by resample
-            if (sum(is.infinite(Boot1$logCFU))>0){Boot1$logCFU[is.infinite(Boot1$logCFU)]<-0}
-            if (sum(is.infinite(Boot2$logCFU))>0){Boot2$logCFU[is.infinite(Boot2$logCFU)]<-0}
+            if (sum(is.infinite(Boot1$logCFU))>0){Boot1$logCFU[is.infinite(Boot1$logCFU)]<-0.1}
+            if (sum(is.infinite(Boot2$logCFU))>0){Boot2$logCFU[is.infinite(Boot2$logCFU)]<-0.1}
+            Boot1$logCFU[Boot1$logCFU<=0]<-0.1
+            Boot2$logCFU[Boot2$logCFU<=0]<-0.1
     
-            ## generate stats and carry out tests
+            ## generate stats and carry out tests for pairs of data sets
             for (k in seq_along(batch_sizes)){
               Boot1s<-Boot1 %>%
                 filter(Batch==batch_sizes[k])
@@ -190,121 +247,211 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
               L5_2=mean(Boot2s$FinalCount[1:round(n2/2)], na.rm=TRUE)
               U5_2=mean(Boot2s$FinalCount[-(1:round(n2/2))], na.rm=TRUE)
               M5_2=mean(Boot2s$FinalCount[ceiling(n2/4):floor(n2*0.75)], na.rm=TRUE)
-
               
               ## store the results
               temp[[idx]]<-tibble(
                 Boot=m,
-                Batch=batch_sizes[k],
-                Run1=i,
-                Run2=j,
+                #Batch1=temp1$Batch,  # note: 
+                #Batch2=temp2$Batch,  # Batch1 and Batch2 from data if data are batched
+                Batch=batch_sizes[k], # Batch is from simulations if data are individual
+                Condition1=temp1$Condition[1],
+                Condition2=temp2$Condition[1],
+                Run1=temp1$Run[1],
+                Run2=temp2$Run[1],
                 meanCFU1=mean(Boot1s$FinalCount, na.rm=TRUE), 
                 meanCFU2=mean(Boot2s$FinalCount, na.rm=TRUE),
                 varCFU1=var(Boot1s$FinalCount, na.rm=TRUE), 
                 varCFU2=var(Boot2s$FinalCount, na.rm=TRUE),
                 cvCFU1=sd(Boot1s$FinalCount, na.rm=TRUE)/mean(Boot1s$FinalCount, na.rm=TRUE),
                 cvCFU2=sd(Boot2s$FinalCount, na.rm=TRUE)/mean(Boot2s$FinalCount, na.rm=TRUE),
-                Q1_1=(U05_1-M5_1)/(M5_1-L05_1), ## Hogg's stats
-                Q2_1=(U05_1-L05_1)/(U5_1-L5_1),
-                Q1_2=(U05_2-M5_2)/(M5_2-L05_2),
-                Q2_2=(U05_2-L05_2)/(U5_2-L5_2),
-                p_sw1=sw1$p.value, 
-                p_sw2=sw2$p.value,
-                p_t=Boot.t$p.value,
-                p_w=Boot.w$p.value
+                Q1.1=(U05_1-M5_1)/(M5_1-L05_1), ## Hogg's stats
+                Q2.1=(U05_1-L05_1)/(U5_1-L5_1),
+                Q1.2=(U05_2-M5_2)/(M5_2-L05_2),
+                Q2.2=(U05_2-L05_2)/(U5_2-L5_2),
+                p.sw1=sw1$p.value, 
+                p.sw2=sw2$p.value,
+                p.t=Boot.t$p.value,
+                p.w=Boot.w$p.value
               )
               idx<-idx+1
-              } ## finish loop over batch sizes
-          }
-        } ## finish loops over run pairs
-    } ## finish loop over bootstraps
-  } else {## finish individual conditional
-    ########
-    ##    IF ONLY BATCHED DATA ARE AVAILABLE
-    ## Someplace to put the data generated
-    temp<-vector("list", length=n_runs*n_runs*nboot)
+              } ## finish loop over batch sizes (k)
+            
+            # If needed - Assemble data across run pairs
+            if(n_conditions>1 & i==j){
+              Boot1$Condition<-temp1$Condition[1]
+              #Boot2$Condition<-temp2$Condition[1]
+              Boot1$Run<-temp1$Run[1]
+              #Boot2$Run<-temp2$Run[1]
+              # combine data 
+              #Boot12<-rbind(Boot1, Boot2)
+              #Boot12$Boot<-m
+              #temp_data[[idx_pair]]<-Boot12
+              Boot1$Boot<-m
+              temp_data[[idx_pair]]<-Boot1
+              idx_pair<-idx_pair+1
+            }
+              
+          } } ## finish loops over run pairs (i, j)
     
-    ## If we have batched data
-    ## Can't extrapolate to other batch sizes, but we can generate summary stats for the batching in data
-    for (m in seq_len(nboot)){  
-      ##print(m) ##debug
-      for (i in seq_len(n_runs)){
-        for (j in seq_len(n_runs)){ ## For each pair of runs
-          ##print(c(i,j)) ## debug
-          ## Obtain two sets of data from the input
-          temp1<-input_data %>%
-            dplyr::filter(Run==run_ids[i])
-          temp2<-input_data %>%
-            dplyr::filter(Run==run_ids[j])
-          n1<-dim(temp1)[1] ## get sizes
-          n2<-dim(temp2)[1]
-          ## Resamples with batch weights from data
-          idx1<-sample(1:n1,n1,replace=TRUE)
-          idx2<-sample(1:n2,n2,replace=TRUE)
-          ## Assume Poisson count error and generate new counts
-          temp_count_1<-rpois(n1, temp1$Count[idx1])
-          temp_count_2<-rpois(n2, temp2$Count[idx2])
-          ## Calculate biologically averaged total counts for resampled data
-          Boot1s<-(correction_constant*temp_count_1*FoldD^temp1$D[idx1])/temp1$Batch
-          Boot2s<-(correction_constant*temp_count_2*FoldD^temp2$D[idx2])/temp2$Batch
+    # within each bootstrap, do comparisons with replicate-structured data
+    if(n_conditions>1){
+      # unpack data set
+      temp_data_long<-dplyr::bind_rows(temp_data)
+      temp_data_long$Run<-factor(temp_data_long$Run)
+      temp_data_long$logCFU[temp_data_long$logCFU<=0]<-0.1
+      
+      # First have to parse out by batch size
+      for (k in seq_along(batch_sizes)){
+              temp_data_long_s<-temp_data_long %>%
+                filter(Batch==batch_sizes[k])
+              # Then pair experimental conditions
+              for (q in 2:n_conditions){
+                #print(c(k, q))  #debug
+                temp_data_long_s1<-temp_data_long_s %>%
+                  filter(Condition==condition_list[q-1] | Condition==condition_list[q])
+                #print(unique(temp_data_long_s1$Condition)) # debug
+                #print(min(temp_data_long_s1$FinalCount))
+                #print(min(temp_data_long_s1$logCFU))
+                # Inside batch size and for pairs of conditions, do tests
+                Boot.t<-t.test(logCFU~Condition, data=temp_data_long_s1)
+                Boot.w<-wilcox.test(logCFU~Condition, data=temp_data_long_s1, exact=FALSE)
+#              # glm significance for "Condition"
+               myglm<-temp_data_long_s1 %>%
+                 glm(logCFU~Condition+Run, family=Gamma, data=.)
+               
+               #print(summary(myglm))  # DEBUG
+                
+               myglm.nested<-temp_data_long_s1 %>%
+                  glm(logCFU~Condition, family=Gamma, data=.)
+               myglm.unique<-temp_data_long_s1 %>%
+                #mutate(unique_replicate=paste(set, replicate, sep="")) %>%
+                glm(logCFU~Condition*Run, family=Gamma, data=.)
+              myglm.lrt<-lrtest(myglm, myglm.nested)
+              glm_dim<-dim(coef(summary(myglm)))
+              #print(AIC(myglm)) # debug
+              #print(AIC(myglm.unique)) # debug
+              # ANOVA
+              my.aov<-aov(logCFU~Condition+Run, data=temp_data_long_s1)
+            
+              #print(summary(my.aov))  #debug
+            
+              }
+              # Store test results
+              temp_reg[[idx_set]]<-tibble(
+                        Run=m,
+                        batch=batch_sizes[k],
+                        Set1=condition_list[q-1],
+                        Set2=condition_list[q],
+                        p.t=Boot.t$p.value,
+                        p.w=Boot.w$p.value,
+                        p.glm=coef(summary(myglm))[glm_dim[1],glm_dim[2]], # obtain p value for Condition2
+                        p.glm.lrt=myglm.lrt$`Pr(>Chisq)`[2],
+                        p.glm.AIC=exp((AIC(myglm)-AIC(myglm.nested))/2),
+                        p.glm.AICu=exp((AIC(myglm.unique)-AIC(myglm))/2),
+                        p.aov=summary(my.aov)[[1]][2,5]
+              )
+              idx_set<-idx_set+1 # advance index for replicate-based test results
+      } # end internal loop over batch sizes
+    } # end replicate-structured comparisons
+    
+    } ## finish loop over bootstraps (m)
+#  } 
+#else {## finish individual conditional
+#    ########
+#    ##    IF ONLY BATCHED DATA ARE AVAILABLE
+#    ## Someplace to put the data generated
+#    temp<-vector("list", length=n_runs*n_runs*nboot)
+#    
+#    ## If we have batched data
+#    ## Can't extrapolate to other batch sizes, but we can generate summary stats for the batching in data
+#    for (m in seq_len(nboot)){  
+#      ##print(m) ##debug
+#      for (i in seq_len(n_runs)){
+#        for (j in seq_len(n_runs)){ ## For each pair of runs
+#          ##print(c(i,j)) ## debug
+#          ## Obtain two sets of data from the input
+#          temp1<-input_data %>%
+#            dplyr::filter(Run==run_ids[i])
+#          temp2<-input_data %>%
+#            dplyr::filter(Run==run_ids[j])
+#          n1<-dim(temp1)[1] ## get sizes
+#          n2<-dim(temp2)[1]
+          ### Resamples with batch weights from data
+#          idx1<-sample(1:n1,n1,replace=TRUE)
+#          idx2<-sample(1:n2,n2,replace=TRUE)
+#          ## Assume Poisson count error and generate new counts
+#          temp_count_1<-rpois(n1, temp1$Count[idx1])
+#          temp_count_2<-rpois(n2, temp2$Count[idx2])
+#          ## Calculate biologically averaged total counts for resampled data
+#          Boot1s<-(correction_constant*temp_count_1*FoldD^temp1$D[idx1])/temp1$Batch
+#          Boot2s<-(correction_constant*temp_count_2*FoldD^temp2$D[idx2])/temp2$Batch
+#          
+#          Boot1s_log<-log10(Boot1s)
+#          Boot1s_log[!is.finite(Boot1s_log)]<-0
+#          Boot2s_log<-log10(Boot2s)
+#          Boot2s_log[!is.finite(Boot2s_log)]<-0
           
-          Boot1s_log<-log10(Boot1s)
-          Boot1s_log[!is.finite(Boot1s_log)]<-0
-          Boot2s_log<-log10(Boot2s)
-          Boot2s_log[!is.finite(Boot2s_log)]<-0
-          
-          Boot.t<-t.test(Boot1s_log, Boot2s_log)
-          Boot.w<-wilcox.test(Boot1s, Boot2s, exact=FALSE)
-          sw1<-shapiro.test(log10(Boot1s))
-          sw2<-shapiro.test(log10(Boot2s))
+#          Boot.t<-t.test(Boot1s_log, Boot2s_log)
+#          Boot.w<-wilcox.test(Boot1s, Boot2s, exact=FALSE)
+#          sw1<-shapiro.test(Boot1s_log)
+#          sw2<-shapiro.test(Boot2s_log)
           
           ## sort data for quantile calculations
-          Boot1s<-sort(Boot1s)
-          Boot2s<-sort(Boot2s)
+#          Boot1s<-sort(Boot1s)
+#          Boot2s<-sort(Boot2s)
           
           ## get values for Hogg's calculations##
-            L05_1=mean(Boot1s[1:ceiling(n1/20)])
-            U05_1=mean(Boot1s[-(1:(n1-ceiling(n1/20)))], na.rm=TRUE)
-            L5_1=mean(Boot1s[1:round(n1/2)], na.rm=TRUE)
-            U5_1=mean(Boot1s[-(1:round(n1/2))], na.rm=TRUE)
-            M5_1=mean(Boot1s[ceiling(n1/4):floor(n1*0.75)], na.rm=TRUE)
-            L05_2=mean(Boot2s[1:ceiling(n2/20)])
-            U05_2=mean(Boot2s[-(1:(n2-ceiling(n2/20)))], na.rm=TRUE)
-            L5_2=mean(Boot2s[1:round(n2/2)], na.rm=TRUE)
-            U5_2=mean(Boot2s[-(1:round(n2/2))], na.rm=TRUE)
-            M5_2=mean(Boot2s[ceiling(n2/4):floor(n2*0.75)], na.rm=TRUE)
+ #           L05_1=mean(Boot1s[1:ceiling(n1/20)])
+#            U05_1=mean(Boot1s[-(1:(n1-ceiling(n1/20)))], na.rm=TRUE)
+#            L5_1=mean(Boot1s[1:round(n1/2)], na.rm=TRUE)
+#            U5_1=mean(Boot1s[-(1:round(n1/2))], na.rm=TRUE)
+#            M5_1=mean(Boot1s[ceiling(n1/4):floor(n1*0.75)], na.rm=TRUE)
+#            L05_2=mean(Boot2s[1:ceiling(n2/20)])
+#            U05_2=mean(Boot2s[-(1:(n2-ceiling(n2/20)))], na.rm=TRUE)
+#            L5_2=mean(Boot2s[1:round(n2/2)], na.rm=TRUE)
+#            U5_2=mean(Boot2s[-(1:round(n2/2))], na.rm=TRUE)
+#            M5_2=mean(Boot2s[ceiling(n2/4):floor(n2*0.75)], na.rm=TRUE)
             
           ## store the results
-          temp[[idx]]<-tibble(
-            Boot=m,
-            Run1=i,
-            Run2=j,
-            meanCFU1=mean(Boot1s, na.rm=TRUE), 
-            meanCFU2=mean(Boot2s, na.rm=TRUE),
-            varCFU1=var(Boot1s, na.rm=TRUE), 
-            varCFU2=var(Boot2s, na.rm=TRUE),
-            cvCFU1=sd(Boot1s, na.rm=TRUE)/mean(Boot1s, na.rm=TRUE),
-            cvCFU2=sd(Boot2s, na.rm=TRUE)/mean(Boot2s, na.rm=TRUE),
-            Q1_1=(U05_1-M5_1)/(M5_1-L05_1), ## Hogg's stats
-            Q2_1=(U05_1-L05_1)/(U5_1-L5_1),
-            Q1_2=(U05_2-M5_2)/(M5_2-L05_2),
-            Q2_2=(U05_2-L05_2)/(U5_2-L5_2),
-            ## store p-values
-            p_sw1=sw1$p.value, 
-            p_sw2=sw2$p.value,
-            p_t=Boot.t$p.value,
-            p_w=Boot.w$p.value
-          )
-          idx<-idx+1
+#          temp[[idx]]<-tibble(
+#            Boot=m,
+#            Batch1=temp1$Batch,
+#            Batch2=temp2$Batch,
+#            Run1=i,
+#            Run2=j,
+#            meanCFU1=mean(Boot1s, na.rm=TRUE), 
+#            meanCFU2=mean(Boot2s, na.rm=TRUE),
+#            varCFU1=var(Boot1s, na.rm=TRUE), 
+#            varCFU2=var(Boot2s, na.rm=TRUE),
+#            cvCFU1=sd(Boot1s, na.rm=TRUE)/mean(Boot1s, na.rm=TRUE),
+#            cvCFU2=sd(Boot2s, na.rm=TRUE)/mean(Boot2s, na.rm=TRUE),
+#            Q1_1=(U05_1-M5_1)/(M5_1-L05_1), ## Hogg's stats
+#            Q2_1=(U05_1-L05_1)/(U5_1-L5_1),
+#            Q1_2=(U05_2-M5_2)/(M5_2-L05_2),
+#            Q2_2=(U05_2-L05_2)/(U5_2-L5_2),
+#            ## store p-values
+#            p_sw1=sw1$p.value, 
+#            p_sw2=sw2$p.value,
+#            p_t=Boot.t$p.value,
+#            p_w=Boot.w$p.value
+#          )
+#          idx<-idx+1
           ##print(idx) ## debug
-        }
-      } ## finish loop over run pairs
-    } ## finish loop over bootstraps
-  } ## end else loop
+#        }
+#      } ## finish loop over run pairs
+#    } ## finish loop over bootstraps
+#  } ## end else loop
   
   ## unfold and return results
   dataSet<-dplyr::bind_rows(temp)
-  return(dataSet)
+  if(n_conditions==1){
+    return(dataSet)
+  } else {
+    regression_summary<-bind_rows(temp_reg)
+    my_list<-list("data_summary" = dataSet, # returns summary data for pairwise run comparisons
+                "regression_summary" = regression_summary) # and for regressions
+    return(my_list)
+  }
 }
 ```
 
@@ -370,6 +517,46 @@ summaryStats<-function(input_data, groups_in=c("Condition", "Run", "Batch"), Fol
 }
 ```
 
+And a function for summarizing output when multiple experimental conditions are put into a bootstrap:
+```{r}
+SimBatchSummaryCorrected<-function(input_data, alpha=0.05, alpha_AIC=0.5){
+  # Summarizes false positive rates for bootstrapped data with replicates
+  input_data <- input_data %>%
+    mutate(isSig_t=as.integer(as.logical(p.t<alpha)),
+           isSig_w=as.integer(as.logical(p.w<alpha)),
+           isSig_glm=as.integer(as.logical(p.glm<alpha)),
+           isSig_lrt=as.integer(as.logical(p.glm.lrt<alpha)),
+           isSig_glm_lrt=as.integer(as.logical(p.glm<alpha & p.glm.lrt<alpha_AIC)),
+           isSig_glm_AIC=as.integer(as.logical(p.glm<alpha & p.glm.AIC<alpha_AIC)),
+           isSig_glm_AICu=as.integer(as.logical(p.glm<alpha & p.glm.AICu<alpha_AIC)),
+           isSig_aov=as.integer(as.logical(p.aov<alpha))
+    )
+  input_data_testsummary<-input_data %>%
+    group_by(batch) %>%
+    summarize(countSigT=sum(isSig_t),
+              countSigW=sum(isSig_w),
+              countSigGLM=sum(isSig_glm),
+              countSigGLMLRT=sum(isSig_glm_lrt),
+              countSigGLMAIC=sum(isSig_glm_AIC),
+              countSigGLMAICu=sum(isSig_glm_AICu),
+              countSigAOV=sum(isSig_aov),
+              n=n()) %>%
+    mutate(fracSigT=countSigT/n,
+           fracSigW=countSigW/n,
+           fracSigGLM=countSigGLM/n,
+           fracSigGLMLRT=countSigGLMLRT/n,
+           fracSigGLMAIC=countSigGLMAIC/n,
+           fracSigGLMAICu=countSigGLMAICu/n,
+           fracSigAOV=countSigAOV/n,
+    ) %>%
+    ungroup() %>%
+    dplyr::select(batch, fracSigT, fracSigW, fracSigGLM,
+                  fracSigGLMLRT, fracSigGLMAIC, fracSigGLMAICu, fracSigAOV) %>%
+    pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
+                 names_prefix = "fracSig", values_to = "fracSig")
+  return(input_data_testsummary)
+}
+```
 
 
 ## Simulation-Based Thresholding: If You Have Individual-Based Data for One Experimental Condition
@@ -382,7 +569,7 @@ First, load in the data. In this example, we use data from the manuscript, focus
 ```{r}
 ## Example data - replace with your own
 SaSeCountAll<-read_xlsx("SaSeCount.xlsx")  ## full data file including single worm data
-input_data<-SaSeCountAll %>%
+input_data_1<-SaSeCountAll %>%
   dplyr::filter(Condition=="SE" & Batch==1) ## filter data to isolate only S. enterica single-worm data
 ```
 
@@ -395,16 +582,16 @@ The bootstrapping functions expect count-based data with a particular structure.
   
 Let's make sure the data structure is OK before proceeding.
 ```{r}
-glimpse(input_data) ## take a quick look at the data object contents and confirm column names are OK
+glimpse(input_data_1) ## take a quick look at the data object contents and confirm column names are OK
 ```
 The resulting data set contains three independent runs of individual-based data, all of which are replicates of the same experimental condition (colonization of N2 adults by *S. enterica*). 
 ```{r}
-unique(input_data$Run)
+unique(input_data_1$Run)
 ```
 
 A quick plot is a useful check at this point:
 ```{r}
-input_data %>%
+input_data_1 %>%
   ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + ## plot bacterial load for each experiment (run)
   geom_jitter(shape=16, position=position_jitter(0.05)) +   ## with a small jitter for visibility
   geom_violin(fill=NA) +    ## and a violin silhouette to see density more easily
@@ -419,7 +606,7 @@ input_data %>%
 ```
 We can also generate summary statistics for the data using the *summaryStats()* function defined in the last section:
 ```{r}
-myStats<-summaryStats(input_data = input_data)
+myStats<-summaryStats(input_data = input_data_1)
 myStats
 ```
 
@@ -427,9 +614,9 @@ myStats
 If the data look as expected, we can proceed to bootstrap. It may be smart to do one run of a bootstrap as a sanity check, to get a feel for what the results will look like. 
 ```{r}
 ## Pull out two runs from the data set
-temp1<-input_data %>%
+temp1<-input_data_1 %>%
   dplyr::filter(Condition=="SE" & Run=="3")
-temp2<-input_data %>%
+temp2<-input_data_1 %>%
   dplyr::filter(Condition=="SE" & Run=="2")
 
 ## For each run, generate bootstrapped data
@@ -472,28 +659,29 @@ jointBoot %>%
 
 If you are satisfied that your data look ok, and that the bootstrap is proceeding correctly, you can proceed to generate a large number of bootstrap data sets and calculate the associated statistics of interest. The function *bootonCountsStats()* will do this, returning summary statistics for bootstrapped data and between-group comparisons:
 ```{r}
-## Carries out nboot simulations and stores
-BootCombinations<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
+## Carries out nboot simulations and stores the output
+# Make sure that your values for FoldD and correction_constant are consistent with the data!
+BootCombinations1<-bootOnCountsStats(input_data=input_data_1, batch_sizes=c(1,5,10,20,50), nboot=1000, 
                                       FoldD=10, correction_constant=20)
 ## If you want more human-interpretable run IDs, they must be added after the bootstrap
-BootCombinations$Run1ID<-paste("Run", BootCombinations$Run1, sep=" ")
-BootCombinations$Run2ID<-paste("Run", BootCombinations$Run2, sep=" ")
+BootCombinations1$Run1ID<-paste("Run", BootCombinations1$Run1, sep=" ")
+BootCombinations1$Run2ID<-paste("Run", BootCombinations1$Run2, sep=" ")
 
 ## look at contents
-glimpse(BootCombinations)
+glimpse(BootCombinations1)
 ```
 
 Get and plot the fraction of runs in which the pairwise test indicates a significant difference between groups. Comparisons of each data set to itself should always have false positive rates close to the declared value alpha.
 ```{r}
 ## how many comparisons are significant for each test?
-BootCombinations<-BootCombinations %>%
-  mutate(isSig_t=as.integer(as.logical(p_t<0.05)), ## label significant t-tests
-         isSig_w=as.integer(as.logical(p_w<0.05)), ## and significant Wilcoxon tests
+BootCombinations1<-BootCombinations1 %>%
+  mutate(isSig_t=as.integer(as.logical(p.t<0.05)), ## label significant t-tests
+         isSig_w=as.integer(as.logical(p.w<0.05)), ## and significant Wilcoxon tests
          RunPair=paste(Run1ID, "v", Run2ID, sep=" ")) ## and label each result with the pairs of runs compared
 
 ## Summarize to get fraction of bootstrap replicates where each test is significant
 ## for each pair of runs at each batch size
-BootCombinations_testsummary<-BootCombinations %>%
+BootCombinations1_testsummary<-BootCombinations1 %>%
   group_by(RunPair, Batch) %>%
   summarize(countSigT=sum(isSig_t),
             countSigW=sum(isSig_w),
@@ -505,14 +693,8 @@ BootCombinations_testsummary<-BootCombinations %>%
   pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
                names_prefix = "fracSig", values_to = "fracSig")
 
-## Remove redundant pairs ('Run 1 v Run 3' is the same as 'Run3 v Run 1')
-## This list works if you have three runs of the experiment in your data file -
-## change your list accordingly
-pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
-            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
 ## plot
-BootCombinations_testsummary %>%
-  dplyr::filter(RunPair %in% pair_list) %>%
+BootCombinations1_testsummary %>%
   ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
   geom_col(position=position_dodge())+
   geom_hline(yintercept=0.05)+
@@ -531,13 +713,13 @@ Having estimated the effects of batching on error rates in pairwise comparisons,
 
 We can do this empirically using the measures of run-to-run distance from Figure 2. First calculate these distances:
 ```{r}
-BootCombinations <- BootCombinations %>%
+BootCombinations1 <- BootCombinations1 %>%
   mutate(
     		meanCFUdist=abs(meanCFU1-meanCFU2)/(meanCFU1+meanCFU2),
     		meanCFUCohenD=abs(meanCFU1-meanCFU2)/sqrt((varCFU1+varCFU2)/2),
     		cvdist=abs(cvCFU1-cvCFU2),
-    		Q1dist=abs(Q1_1-Q1_2),
-    		Q2dist=abs(Q2_1-Q2_2)
+    		Q1dist=abs(Q1.1-Q1.2),
+    		Q2dist=abs(Q2.1-Q2.2)
   )
 ```
 
@@ -545,7 +727,7 @@ And plot out:
 ```{r}
 my.labs<-c("Mean CFU", "Cohen's D", "CV", "Q1", "Q2")
 names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist","Q2dist")
-BootCombinations %>%
+BootCombinations1 %>%
   pivot_longer(., cols = c(meanCFUdist, meanCFUCohenD, cvdist, Q1dist, Q2dist), 
                names_to = "Var", values_to = "Value") %>%
   mutate(Var=factor(Var, 
@@ -565,32 +747,32 @@ BootCombinations %>%
   facet_wrap(vars(Var), scales="free", nrow=1, labeller=labeller(Var=my.labs))
 ```
 
-Note that while the distribution of rescaled distances between means is relatively unaffected by batching except in the tails, Cohen's D (variance-normalized mean distance) and distances in the coefficient of variation (CV) and in Q1 (quantile-based measure of skewness) are strongly affected by batching, consistent with the observed increase in false-positive pairwise comparisons.  
+Note that while the quantile range of rescaled distances between means is relatively unaffected by batching, Cohen's D (variance-normalized mean distance) and distances in the coefficient of variation (CV) and in Q1 (quantile-based measure of skewness) are strongly affected by batching, consistent with the observed increase in false-positive pairwise comparisons.  
 
 We can get exact numbers from the quantiles of the distribution of mean distances:
 ```{r}
-BootCombinations %>%
+BootCombinations1 %>%
   group_by(Batch) %>%
   summarize(q75MeanDist=quantile(meanCFUdist, probs=0.75),
             q90MeanDist=quantile(meanCFUdist, probs=0.9))
 ```
 
-The distribution of mean distances suggests a cutoff of ~0.35, below which we will not consider any statistically significant comparisons to be "real". If we impose this cutoff, we find that implementing this cutoff dramatically reduces - and for some pairs entirely eliminates - false positive rate inflation due to batching.
+The distribution of mean distances suggests a cutoff of 0.3-0.35, below which we will not consider any statistically significant comparisons to be "real". If we impose this cutoff, we find that implementing this cutoff dramatically reduces - and for some pairs entirely eliminates - false positive rate inflation due to batching.
 ```{r}
 ## how many comparisons are significant for each test?
-meandiff_cutoff<-0.35
+meandiff_cutoff_1<-0.35
 
-BootCombinations_cutoff<-BootCombinations %>%
-  mutate(isSig_tc=as.integer(as.logical(p_t<0.05 & meanCFUdist>meandiff_cutoff)), ## label significant t-tests
-         isSig_wc=as.integer(as.logical(p_w<0.05 & meanCFUdist>meandiff_cutoff)) ## and significant Wilcoxon tests
+BootCombinations1_cutoff<-BootCombinations1 %>%
+  mutate(isSig_tc=as.integer(as.logical(p.t<0.05 & meanCFUdist>meandiff_cutoff_1)), ## label significant t-tests
+         isSig_wc=as.integer(as.logical(p.w<0.05 & meanCFUdist>meandiff_cutoff_1)) ## and significant Wilcoxon tests
          ) ## and label each result with the pairs of runs compared 
-glimpse(BootCombinations_cutoff) ## make sure the data are as expected
+glimpse(BootCombinations1_cutoff) ## make sure the data are as expected
 ```
 
 ```{r}
 ## Summarize to get fraction of bootstrap replicates where each test is significant
 ## for each pair of runs at each batch size
-BootCombinations_cutoff_testsummary<-BootCombinations_cutoff %>%
+BootCombinations1_cutoff_testsummary<-BootCombinations1_cutoff %>%
   group_by(RunPair, Batch) %>%
   summarize(countSigT=sum(isSig_tc),
             countSigW=sum(isSig_wc),
@@ -602,14 +784,9 @@ BootCombinations_cutoff_testsummary<-BootCombinations_cutoff %>%
   pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
                names_prefix = "fracSig", values_to = "fracSig")
 
-## Remove redundant pairs ('Run 1 v Run 3' is the same as 'Run3 v Run 1')
-## This list works if you have three runs -
-## change your list accordingly
-pair_list=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
-            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3")
 ## plot
-BootCombinations_cutoff_testsummary %>%
-  dplyr::filter(RunPair %in% pair_list) %>%
+BootCombinations1_cutoff_testsummary %>%
+#  dplyr::filter(RunPair %in% pair_list) %>%
   ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
   geom_col(position=position_dodge())+
   geom_hline(yintercept=0.05)+
@@ -635,19 +812,24 @@ Keep in mind that the decision of how large a distance to accept as "real", much
 If you have a second set of individual-based data from a condition that you think is "different", you can use within AND between-group differences to balance these risks. For example, the data set from the manuscript also contains single-worm data for colonization by *Staphylococcus aureus* (SA) that can be used for comparisons.
 
 ```{r}
-input_data<-SaSeCountAll %>%
+input_data_1<-SaSeCountAll %>%
   dplyr::filter(Condition=="SE" & Batch==1) ## filter data to isolate only S. enterica single-worm data
 
 my_runs<-c(4,5,6) ## The last three runs with SA have a TOD similar to those in the SE data and are more comparable
 input_data_2<-SaSeCountAll %>%
   dplyr::filter(Condition=="SA"& Batch==1) %>% ## filter data to isolate only S. aureus single-worm data
   dplyr::filter(Run %in% my_runs)    ## from the last three runs of this experiment
-input_data<-rbind(input_data, input_data_2) ## and combine with SE data
+
+# Relabel runs so that Run is an internal index
+input_data_2$Run[input_data_2$Run==4]<-1
+input_data_2$Run[input_data_2$Run==5]<-2
+input_data_2$Run[input_data_2$Run==6]<-3
+
+input_data<-rbind(input_data_1, input_data_2) ## and combine with SE data
 
 glimpse(input_data)
 ```
-
-Note that the run IDs (numeric) are already unique (SE is runs 1-3; SA is runs 4-6)! Otherwise we would have to fix this, as the bootstrap code will group the data by runs.
+Make sure data structure and run indexing are correct:
 ```{r}
 unique(input_data$Batch)
 unique(input_data$Run)
@@ -669,30 +851,100 @@ input_data %>%
   facet_wrap(~Condition, scales="free_x")
 ```
 
+Because more than one experimental condition is present, we have the opportunity to use regression-based partition of variation (maybe ANOVA, but more likely a GLM is appropriate) to directly examine the relative contributions of variation among replicates and variation between conditions to the overall variation in the data set.
+
+For an ANOVA to be valid, we need to know that the data are homoscedastic (equal variances):
+```{r}
+# Levene's test is commonly used to assess heteroscedasticity
+```
+
+And ideally that the data are normally distributed (although ANOVA is fairly robust to this assumption):
+```{r}
+# Shapiro-Wilk is a common test for normality, but there are others
+# For example, Koromogorov-Smirnov is sometimes used, but this test is very sensitive to sample size
+
+```
+
+Let's assume for a minute that these tests show that our data are homoscedastic and normally distributed, so we are completely comfortable applying an ANOVA. We will bootstrap this to assess significance rates, but before we decide to rely on these results, it is a good idea to run ANOVA on the observed data:
+```{r}
+input_data.aov<-input_data %>%
+  mutate(Run=as.factor(Run)) %>%
+  aov(logCFU~Condition+Run, data=.)
+summary(input_data.aov)
+```
+
+And check the usual metrics for appropriateness of fit:
+```{r}
+plot(input_data.aov)
+```
+
+For these data, residual vs fitted plots aren't terrible, but the QQ plot is bad, indicating marked non-normality of the residuals. ANOVA probably isn't the best choice on these data. (The bootstrap function will report ANOVA significance rates for any input data; the user needs to determine whether or not to use these results.)
+
+Much of the time, GLM will be a better choice. For count data without significant zero contamination or censoring, the Gamma family with the default logit link is often suitable, but this will depend on the properties of your data. 
+
+Note that to use Gamma, any zeros in the data set will need to be replaced with some non-zero value. Here, we will replace these values with a small positive number; another common choice is to choose some formula to replace zeros with values between 0 and the threshold of detection. If zeros are rare, the choice of adjustment will have very little effect on the results of this kind of analysis.
+```{r}
+# adjust zeros by simple replacement
+input_data$logCFU[input_data$logCFU==0]<-0.1
+
+# put through GLM
+input_data.glm<-input_data %>%
+  mutate(Run=as.factor(Run)) %>%
+  glm(logCFU~Condition+Run, family=Gamma, data=.)
+# print results to screen
+summary(input_data.glm)
+```
+
+As with the ANOVA, it is a good idea to check the fit before deciding that the choice of model is appropriate.
+```{r}
+# deviance density plot - should be one relatively smooth curve with a mean close to 0
+# (the zero correction may introduce a "bump" somewhere depending on how it is implemented)
+plot(density(resid(input_data.glm, type='deviance'))) 
+# all deviances - should be a basically straight line, no curves
+scatter.smooth(1:length(rstandard(input_data.glm, type='deviance')), rstandard(input_data.glm, type='deviance'), col='gray')
+#residuals vs fitted - should be a basically straight line
+scatter.smooth(predict(input_data.glm, type='response'), 
+               rstandard(input_data.glm, type='deviance'), col='gray')
+```
+
 We can carry out the same bootstrap analysis as before, this time allowing comparisons within each condition (runs 1-3, SE; runs 4-6, SA) as well as across conditions, to determine the range and distribution of distances.
 ```{r}
 ## Carries out nboot simulations and stores
-BootCombinations_SA_SE<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
+BootCombinations2<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
                                       FoldD=10, correction_constant=20)
-#### If you want more human-interpretable run IDs, they must be added after the bootstrap
-BootCombinations_SA_SE$Run1ID<-paste("Run", BootCombinations_SA_SE$Run1, sep=" ")
-BootCombinations_SA_SE$Run2ID<-paste("Run", BootCombinations_SA_SE$Run2, sep=" ")
-
 #### look at contents
-glimpse(BootCombinations_SA_SE)
+glimpse(BootCombinations2)
+```
+Since we have two experimental conditions, the function now returns two objects:
+```{r}
+# a summary of the run-by run comparisons
+BootCombinations2_ds<-BootCombinations2$data_summary
+
+# and a summary of the comparisons across experimental conditions (here, S. enterica vs S. aureus)
+BootCombinations2_rs<-BootCombinations2$regression_summary
+
+# remove the parent object
+rm(BootCombinations2)
+
+#### If you want more human-interpretable run IDs, they must be added after the bootstrap
+BootCombinations2_ds$Run1ID<-paste(BootCombinations2_ds$Condition1, "Run", BootCombinations2_ds$Run1, sep=" ")
+BootCombinations2_ds$Run2ID<-paste(BootCombinations2_ds$Condition2, "Run", BootCombinations2_ds$Run2, sep=" ")
+
+#### look at contents of the first object (same as when we had only one experimental condition)
+glimpse(BootCombinations2_ds)
 ```
 
 As before, we can now get and plot the fraction of runs in which the pairwise test indicates a significant difference between groups. Comparisons of each data set to itself should always have false positive rates close to the declared value alpha.
 ```{r}
 #### how many comparisons are significant for each test?
-BootCombinations_SA_SE<-BootCombinations_SA_SE %>%
-  mutate(isSig_t=as.integer(as.logical(p_t<0.05)), ## label significant t-tests
-         isSig_w=as.integer(as.logical(p_w<0.05)), ## and significant Wilcoxon tests
-         RunPair=paste(Run1ID, "v", Run2ID, sep=" ")) ## and label each result with the pairs of runs compared
+BootCombinations2_ds<-BootCombinations2_ds %>%
+  mutate(isSig_t=as.integer(as.logical(p.t<0.05)), ## label significant t-tests
+         isSig_w=as.integer(as.logical(p.w<0.05)), ## and significant Wilcoxon tests
+         RunPair=paste(Condition1, Run1, "v", Condition2, Run2, sep=" ")) ## and label each result with the pairs of runs compared
 
 ## Summarize to get fraction of bootstrap replicates where each test is significant
 ## for each pair of runs at each batch size
-BootCombinations_SA_SE_testsummary<-BootCombinations_SA_SE %>%
+BootCombinations2_testsummary<-BootCombinations2_ds %>%
   group_by(RunPair, Batch) %>%
   summarize(countSigT=sum(isSig_t),
             countSigW=sum(isSig_w),
@@ -703,24 +955,11 @@ BootCombinations_SA_SE_testsummary<-BootCombinations_SA_SE %>%
   dplyr::select(RunPair, Batch, fracSigT, fracSigW) %>%
   pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
                names_prefix = "fracSig", values_to = "fracSig")
-
-## Remove redundant pairs ('Run 1 v Run 3' is the same as 'Run3 v Run 1')
-## This list works if you have six total runs in your data file -
-## change your list accordingly
-pair_list_SA_SE=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
-            "Run 4 v Run 4", "Run 5 v Run 5", "Run 6 v Run 6",
-            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3",
-            "Run 1 v Run 4","Run 1 v Run 5","Run 1 v Run 6",
-            "Run 2 v Run 4","Run 2 v Run 5","Run 2 v Run 6",
-            "Run 3 v Run 4","Run 3 v Run 5","Run 3 v Run 6",
-            "Run 4 v Run 5","Run 4 v Run 6","Run 5 v Run 6"            
-            )
 ```
 
 ```{r fig.width=10}
 ## plot
-BootCombinations_SA_SE_testsummary %>%
-  dplyr::filter(RunPair %in% pair_list_SA_SE) %>%
+BootCombinations2_testsummary %>%
   ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
   geom_col(position=position_dodge())+
   geom_hline(yintercept=0.05)+
@@ -737,35 +976,36 @@ BootCombinations_SA_SE_testsummary %>%
 
 Now we can calculate distances and label by whether pairs of runs are from the same experimental condition.
 ```{r}
-BootCombinations_SA_SE <- BootCombinations_SA_SE %>%
+BootCombinations2_ds <- BootCombinations2_ds %>%
   mutate(
     		meanCFUdist=abs(meanCFU1-meanCFU2)/(meanCFU1+meanCFU2),
     		meanCFUCohenD=abs(meanCFU1-meanCFU2)/sqrt((varCFU1+varCFU2)/2),
     		cvdist=abs(cvCFU1-cvCFU2),
-    		Q1dist=abs(Q1_1-Q1_2),
-    		Q2dist=abs(Q2_1-Q2_2),
+    		Q1dist=abs(Q1.1-Q1.2),
+    		Q2dist=abs(Q2.1-Q2.2),
     		PairType="Different"
   )
 ## correct Pair to indicate whether runs are from the same condition
-my_size<-dim(BootCombinations_SA_SE)[1] # size of object
+my_size<-dim(BootCombinations2_ds)[1] # size of object
 for(i in seq_len(my_size)){
-  if(BootCombinations_SA_SE$Run1[i]<=3 & BootCombinations_SA_SE$Run2[i]<=3) {
-    BootCombinations_SA_SE$PairType[i]="Same"
-  } else if (BootCombinations_SA_SE$Run1[i]>=4 & BootCombinations_SA_SE$Run2[i]>=4){BootCombinations_SA_SE$PairType[i]="Same"}
+  if(BootCombinations2_ds$Condition1[i]==BootCombinations2_ds$Condition2[i]) {
+    BootCombinations2_ds$PairType[i]="Same"
+  } 
 }
-glimpse(BootCombinations_SA_SE)
+glimpse(BootCombinations2_ds)
 ```
 
-And plot out:
-```{r}
-my.labs<-c("Mean CFU", "Cohen's D", "CV", "Q1", "Q2")
-names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist","Q2dist")
-BootCombinations_SA_SE %>%
-  dplyr::select(Batch, RunPair, PairType, meanCFUdist, meanCFUCohenD, cvdist, Q1dist, Q2dist) %>%
-  pivot_longer(., cols = c(meanCFUdist, meanCFUCohenD, cvdist, Q1dist, Q2dist), 
+And plot out (leaving out Q1, since it is very noisy):
+```{r fig.height=8}
+my.labs<-c("Mean CFU", "Cohen's D", "CV", "Q2")
+names(my.labs)=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q2dist")
+
+BootCombinations2_ds %>%
+  dplyr::select(Batch, RunPair, PairType, meanCFUdist, meanCFUCohenD, cvdist, Q2dist) %>%
+  pivot_longer(., cols = c(meanCFUdist, meanCFUCohenD, cvdist, Q2dist), 
                names_to = "Var", values_to = "Value") %>%
   mutate(Var=factor(Var, 
-                    levels=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q1dist", "Q2dist")) ) %>%
+                    levels=c("meanCFUdist", "meanCFUCohenD", "cvdist", "Q2dist")) ) %>%
   ggplot(aes(x=factor(PairType), y=Value, color=Var))+
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   geom_boxplot(fill=NA) +	
@@ -783,28 +1023,29 @@ BootCombinations_SA_SE %>%
 
 We can get exact numbers from the quantiles of the distribution of mean distances:
 ```{r}
-BootCombinations_SA_SE %>%
+BootCombinations2_ds %>%
   group_by(PairType, Batch) %>%
   summarize(q75MeanDist=quantile(meanCFUdist, probs=0.75),
             q90MeanDist=quantile(meanCFUdist, probs=0.9))
 ```
 
-We can then implement the new slightly higher cutoff:
+We can then implement a cutoff:
 ```{r}
 ## how many comparisons are significant for each test?
-meandiff_cutoff<-0.45
+meandiff_cutoff<-0.35
 
-BootCombinations_SA_SE<-BootCombinations_SA_SE %>%
-  mutate(isSig_tc=as.integer(as.logical(p_t<0.05 & meanCFUdist>meandiff_cutoff)), ## label significant t-tests
-         isSig_wc=as.integer(as.logical(p_w<0.05 & meanCFUdist>meandiff_cutoff)) ## and significant Wilcoxon tests
+BootCombinations2_ds<-BootCombinations2_ds %>%
+  mutate(isSig_tc=as.integer(as.logical(p.t<0.05 & meanCFUdist>meandiff_cutoff)), ## label significant t-tests
+         isSig_wc=as.integer(as.logical(p.w<0.05 & meanCFUdist>meandiff_cutoff)) ## and significant Wilcoxon tests
          ) ## and label each result with the pairs of runs compared 
-glimpse(BootCombinations_SA_SE) ## make sure the data are as expected
+glimpse(BootCombinations2_ds) ## make sure the data are as expected
 ```
+
 Plotting this out, we see that false positive rates are well controlled for the most part, but that run 2 (SE) becomes essentially indistinguishable from any of the SA data sets (runs 4-6), and run 6 (SA) becomes indistinguishable from any of the SE data sets (runs 1-3), reflecting the tradeoff in false negative rates.
 ```{r, fig.width=10}
 ## Summarize to get fraction of bootstrap replicates where each test is significant
 ## for each pair of runs at each batch size
-BootCombinations_SA_SE_cutoff_testsummary<-BootCombinations_SA_SE %>%
+BootCombinations2_cutoff_testsummary<-BootCombinations2_ds %>%
   group_by(RunPair, PairType, Batch) %>%
   summarize(countSigT=sum(isSig_tc),
             countSigW=sum(isSig_wc),
@@ -816,20 +1057,8 @@ BootCombinations_SA_SE_cutoff_testsummary<-BootCombinations_SA_SE %>%
   pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
                names_prefix = "fracSig", values_to = "fracSig")
 
-## Remove redundant pairs ('Run 1 v Run 3' is the same as 'Run3 v Run 1')
-## This list works if you have six total runs in your data file -
-## change your list accordingly
-pair_list_SA_SE=c("Run 1 v Run 1", "Run 2 v Run 2", "Run 3 v Run 3",
-            "Run 4 v Run 4", "Run 5 v Run 5", "Run 6 v Run 6",
-            "Run 1 v Run 2","Run 1 v Run 3","Run 2 v Run 3",
-            "Run 1 v Run 4","Run 1 v Run 5","Run 1 v Run 6",
-            "Run 2 v Run 4","Run 2 v Run 5","Run 2 v Run 6",
-            "Run 3 v Run 4","Run 3 v Run 5","Run 3 v Run 6",
-            "Run 4 v Run 5","Run 4 v Run 6","Run 5 v Run 6"            
-            )
 ## plot
-BootCombinations_SA_SE_cutoff_testsummary %>%
-    dplyr::filter(RunPair %in% pair_list_SA_SE) %>%
+BootCombinations2_cutoff_testsummary %>%
   ggplot(aes(x=factor(Batch), y=fracSig, fill=factor(test)))+
   geom_col(position=position_dodge())+
   geom_hline(yintercept=0.05)+
@@ -844,11 +1073,39 @@ BootCombinations_SA_SE_cutoff_testsummary %>%
   facet_wrap(~RunPair, ncol=7)
 ```
 
-
+Since the data contained more than one experimental conditions, we can also explore what happens when bootstrapped data are compared across experimental conditions. The second object that was output from the bootstrap simulations contains this information:
 ```{r}
-
+# A summary of the comparisons across experimental conditions (here, S. enterica vs S. aureus)
+glimpse(BootCombinations2_rs)
 ```
 
+Along with pairwise tests, this object includes comparisons of nested GLMs:
+* **p.glm** is the p-value associated with experimental condition ("Set" in this output) in a gamma-family GLM with formula log(CFU) ~ Set + Run
+* **p.aov** is the p-value associated with an ANOVA of the same form. Since ANOVA will rarely be the best choice for comparisons of population counts, this is shown largely for comparison.
+* **p.glm.lrt** is the p-value for a likelihood ratio test comparing the two-term GLM to a nested GLM of formula log(CFU) ~ Set
+* **p.glm.AIC** is the result of comparing these two models based on AIC
+* **p.glm.AICu** is the result of comparing the additive model with a full GLM of the form log(CFU) ~ Set * Run 
+
+Let's summarize these results:
+```{r}
+BootCombinations2_rs_summary<-SimBatchSummaryCorrected(BootCombinations2_rs)
+glimpse(BootCombinations2_rs_summary)
+```
+
+And plot:
+```{r}
+BootCombinations2_rs_summary %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Test Results")
+```
 
 
 ***
