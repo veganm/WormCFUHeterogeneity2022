@@ -16,9 +16,9 @@ pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, read
 # S. enterica colonization raw data
 # Bootstrap many times, over all three runs
 
-input_data<-SaSeCountAll %>%
+input_data_1<-SaSeCountAll %>%
   dplyr::filter(Condition=="SE" & Batch==1)
-SeBootCombinations<-bootOnCountsStats(input_data=input_data, batch_sizes=c(1,5,10,20,50), nboot=1000, 
+SeBootCombinations<-bootOnCountsStats(input_data=input_data_1, batch_sizes=c(1,5,10,20,50), nboot=1000, 
                                       FoldD=10, correction_constant=20)
 glimpse(SeBootCombinations)
 
@@ -1131,18 +1131,17 @@ ggsave("FigS8_pSimBatchBetaRand.5.5.meancompare3days.png", width=6, height=6, un
 
 
 
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+#             FIGURE S9
+#
 ###########  What if we instead take the populations of means in regressions?
-wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, runs=3, nbatches=24, maxCFU=100000)
-#glimpse(wormSimF.1.5)
-#wormSimF.1.5<- wormSimF.1.5 %>%
-#  mutate(unique_run=paste(set, run, sep=""))
+wormSimF.1.5<-wormSimBatchBetaFactorial(a=1, b=5, runs=3, nbatches=24)
 glimpse(wormSimF.1.5)
-#wormSimF.1.5$unique_run<-as.factor(wormSimF.1.5$unique_run)
-wormSimF.1.5$run<-as.character(wormSimF.1.5$run)
+wormSimF.1.5$run<-as.factor(wormSimF.1.5$run)
 wormSimF.1.5 %>%
- ggplot(aes(x=factor(batch), y=logCFU, color=factor(run))) + 
+ ggplot(aes(x=factor(batch), y=logCFU, color=run)) + 
   geom_violin(fill=NA) + 
   geom_point(shape=16, position=position_jitterdodge(0.2)) +
   ylim(1,5) + theme_classic() + 
@@ -1246,11 +1245,11 @@ exp((+578.2-582.23)/2)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## try this in simulations. Does the LRT help?
 wormSimBatchBeta.1.5.100runs<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=24, runs=100, reps=3)
-#glimpse(wormSimBatchBeta.1.5.100runs)  
+glimpse(wormSimBatchBeta.1.5.100runs)  
 wormSimBatchBeta.1.5.100runs.summary<-wormSimBatchBeta.1.5.100runs$data_summary
 wormSimBatchBeta.1.5.100runs.single<-wormSimBatchBeta.1.5.100runs$single_run
 rm(wormSimBatchBeta.1.5.100runs)
-#glimpse(wormSimBatchBeta.1.5.100runs.summary)  
+glimpse(wormSimBatchBeta.1.5.100runs.summary)  
 
 #check values
 wormSimBatchBeta.1.5.100runs.summary %>%
@@ -1258,23 +1257,42 @@ wormSimBatchBeta.1.5.100runs.summary %>%
   geom_histogram()+
   facet_wrap(~batch)
 
+wormSimBatchBeta.1.5.100runs.single %>%
+  ggplot(aes(x=factor(batch), y=logCFU, color=as.factor(replicate))) + 
+  geom_violin(fill=NA) + 
+  geom_point(shape=16, position=position_jitterdodge(0.2)) +
+  ylim(1,5) + theme_classic() + 
+  scale_color_viridis_d(option="mako", end=0.8)+
+  theme(text=element_text(size=14), 
+        #axis.title.x = element_blank(), 
+        plot.title=element_text(hjust=0.5),
+  ) + 
+  facet_wrap(~set)+
+  labs(title="Simulated data, Beta(1,5)", 
+       x="Batch size",
+       y=expression(log[10](Bacteria)),
+       color="Replicate")
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## a function to summarize test results 
 SimBatchBetaSummaryCorrected<-function(input_data, alpha=0.05, alpha_AIC=0.5){
   # takes the data_summary output from wormSimBatchBeta3
   # and summarizes false positive rates
   input_data <- input_data %>%
-    mutate(isSig_t=as.integer(as.logical(p.t<0.05)),
-           isSig_w=as.integer(as.logical(p.w<0.05)),
-           isSig_glm=as.integer(as.logical(p.glm<0.05)),
-           isSig_lrt=as.integer(as.logical(p.glm.lrt<0.05)),
-           isSig_glm_lrt=as.integer(as.logical(p.glm<0.05 & p.glm.lrt<0.05)),
-           isSig_glm_AIC=as.integer(as.logical(p.glm<0.05 & p.glm.AIC<0.5)),
-           isSig_glm_AICu=as.integer(as.logical(p.glm<0.05 & p.glm.AICu<0.5)),
-           isSig_aov=as.integer(as.logical(p.aov<0.05))
+    mutate(isSig_t=as.integer(as.logical(p.t<alpha)),
+           isSig_w=as.integer(as.logical(p.w<alpha)),
+           isSig_glm=as.integer(as.logical(p.glm<alpha)),
+           isSig_lrt=as.integer(as.logical(p.glm.lrt<alpha)),
+           isSig_glm_lrt=as.integer(as.logical(p.glm<alpha & p.glm.lrt<alpha_AIC)),
+           isSig_glm_AIC=as.integer(as.logical(p.glm<alpha & p.glm.AIC<alpha_AIC)),
+           isSig_glm_AICu=as.integer(as.logical(p.glm<alpha & p.glm.AICu<alpha_AIC)),
+           isSig_aov=as.integer(as.logical(p.aov<alpha))
     )
   input_data_testsummary<-input_data %>%
-    group_by(dist, batch) %>%
+    group_by(dist, distB, batch) %>%
     summarize(countSigT=sum(isSig_t),
               countSigW=sum(isSig_w),
               countSigGLM=sum(isSig_glm),
@@ -1292,21 +1310,26 @@ SimBatchBetaSummaryCorrected<-function(input_data, alpha=0.05, alpha_AIC=0.5){
            fracSigAOV=countSigAOV/n,
     ) %>%
     ungroup() %>%
-    dplyr::select(dist, batch, fracSigT, fracSigW, fracSigGLM,
+    dplyr::select(dist, distB, batch, fracSigT, fracSigW, fracSigGLM,
                   fracSigGLMLRT, fracSigGLMAIC, fracSigGLMAICu, fracSigAOV) %>%
     pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
                  names_prefix = "fracSig", values_to = "fracSig")
   return(input_data_testsummary)
 }
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # summarize
 wormSimBatchBeta.1.5.100runs_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.summary)
+wormSimBatchBeta.1.5.100runs_testsummary$nreps<-3
 # did using LRT help with false positives? kinda!
 wormSimBatchBeta.1.5.100runs_testsummary %>%
   ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
   geom_col(position=position_dodge())+
   geom_hline(yintercept=0.05)+
+  scale_fill_viridis_d(direction=-1)+
   theme_bw()+
   theme(
     text=element_text(size=xTextSize), 
@@ -1320,6 +1343,7 @@ wormSimBatchBeta.1.5.100runs.6reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, max
 wormSimBatchBeta.1.5.100runs.6reps.summary<-wormSimBatchBeta.1.5.100runs.6reps$data_summary
 wormSimBatchBeta.1.5.100runs.6reps.single<-wormSimBatchBeta.1.5.100runs.6reps$single_run
 rm(wormSimBatchBeta.1.5.100runs.6reps)
+wormSimBatchBeta.1.5.100runs.6reps_testsummary$nreps<-6
 
 # summarize test results for Beta(1,5)
 wormSimBatchBeta.1.5.100runs.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.6reps.summary)
@@ -1343,12 +1367,14 @@ wormSimBatchBeta.1.5.100runs.12reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, ma
 wormSimBatchBeta.1.5.100runs.12reps.summary<-wormSimBatchBeta.1.5.100runs.12reps$data_summary
 wormSimBatchBeta.1.5.100runs.12reps.single<-wormSimBatchBeta.1.5.100runs.12reps$single_run
 rm(wormSimBatchBeta.1.5.100runs.12reps)
-#glimpse(wormSimBatchBeta.1.5.100runs.12reps.summary)  
+glimpse(wormSimBatchBeta.1.5.100runs.12reps.summary)  
 
 # summarize test results for Beta(1,5)
 wormSimBatchBeta.1.5.100runs.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.12reps.summary)
+glimpse(wormSimBatchBeta.1.5.100runs.12reps_testsummary)
+wormSimBatchBeta.1.5.100runs.12reps_testsummary$nreps<-12
 
-# did using LRT help with false positives? not anymore. Too many df in replicates.
+# did using LRT help with false positives? not anymore, really. Too many df in replicates.
 wormSimBatchBeta.1.5.100runs.12reps_testsummary %>%
   ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
   geom_col(position=position_dodge())+
@@ -1363,229 +1389,527 @@ wormSimBatchBeta.1.5.100runs.12reps_testsummary %>%
        title="Test Results, Beta(1,5), 12 replicates")
 
 
-####### and the symmetric data
-#wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, reps=24, maxCFU=100000)
-wormSimF.5.5<-wormSimBatchBetaFactorial(a=5, b=5, runs=3, nbatches=24, maxCFU=100000)
-glimpse(wormSimF.5.5)
-wormSimF.5.5$run<-as.factor(wormSimF.5.5$run)
-wormSimF.5.5 %>%
-  ggplot(aes(x=factor(batch), y=logCFU, color=run)) + 
-  geom_violin(fill=NA) + 
-  geom_point(shape=16, position=position_jitterdodge(0.2)) +
-  ylim(1,5) + theme_classic() + 
-  scale_color_viridis_d(option="mako", end=0.8)+
-  theme(text=element_text(size=14), 
-        #axis.title.x = element_blank(), 
-        plot.title=element_text(hjust=0.5),
-  ) + 
-  facet_wrap(~set)+
-  labs(title="Simulated data, Beta(5,5)", 
-       x="Batch size",
-       y=expression(log[10](Bacteria)),
-       color="Replicate")
+####### and the symmetric distribution
+wormSimBatchBeta.5.5.100runs.3reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=24, runs=100, reps=3)
+wormSimBatchBeta.5.5.100runs.3reps.summary<-wormSimBatchBeta.5.5.100runs.3reps$data_summary
+wormSimBatchBeta.5.5.100runs.3reps.single<-wormSimBatchBeta.5.5.100runs.3reps$single_run
+rm(wormSimBatchBeta.5.5.100runs.3reps)
+wormSimBatchBeta.5.5.100runs.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.3reps.summary)
+wormSimBatchBeta.5.5.100runs.3reps_testsummary$nreps<-3
 
-## try this in simulations. Does the LRT help?
-wormSimBatchBeta.5.5.100runs<-wormSimBatchBeta3(a=1, b=5, nWorms=2000, maxSamples=24, runs=100, reps=3)
-#glimpse(wormSimBatchBeta.5.5.100runs)  
-wormSimBatchBeta.5.5.100runs.summary<-wormSimBatchBeta.5.5.100runs$data_summary
-wormSimBatchBeta.5.5.100runs.single<-wormSimBatchBeta.5.5.100runs$single_run
-rm(wormSimBatchBeta.5.5.100runs)
-#glimpse(wormSimBatchBeta.5.5.100runs.summary)  
+wormSimBatchBeta.5.5.100runs.6reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=24, runs=100, reps=6)
+wormSimBatchBeta.5.5.100runs.6reps.summary<-wormSimBatchBeta.5.5.100runs.6reps$data_summary
+wormSimBatchBeta.5.5.100runs.6reps.single<-wormSimBatchBeta.5.5.100runs.6reps$single_run
+rm(wormSimBatchBeta.5.5.100runs.6reps)
+wormSimBatchBeta.5.5.100runs.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.6reps.summary)
+wormSimBatchBeta.5.5.100runs.6reps_testsummary$nreps<-6
 
-# summarize test results for Beta(1,5)
-wormSimBatchBeta.5.5.100runs.summary <- wormSimBatchBeta.5.5.100runs.summary %>%
-  mutate(isSig_t=as.integer(as.logical(p.t<0.05)),
-         isSig_w=as.integer(as.logical(p.w<0.05)),
-         isSig_glm=as.integer(as.logical(p.glm<0.05)),
-         isSig_glm_lrt=as.integer(as.logical(p.glm<0.05 & p.glm.lrt<0.05)),
-         isSig_glm_AIC=as.integer(as.logical(p.glm<0.05 & p.glm.AIC<0.5)),
-         isSig_glm_AICu=as.integer(as.logical(p.glm<0.05 & p.glm.AICu<0.5)),
-         isSig_aov=as.integer(as.logical(p.aov<0.05))
-  )
-#glimpse(wormSimBatchBeta.5.5.100runs.summary)
+wormSimBatchBeta.5.5.100runs.12reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=24, runs=100, reps=12)
+wormSimBatchBeta.5.5.100runs.12reps.summary<-wormSimBatchBeta.5.5.100runs.12reps$data_summary
+wormSimBatchBeta.5.5.100runs.12reps.single<-wormSimBatchBeta.5.5.100runs.12reps$single_run
+rm(wormSimBatchBeta.5.5.100runs.12reps)
+wormSimBatchBeta.5.5.100runs.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.12reps.summary)
+wormSimBatchBeta.5.5.100runs.12reps_testsummary$nreps<-12
 
-wormSimBatchBeta.5.5.100runs_testsummary<-wormSimBatchBeta.5.5.100runs.summary %>%
-  group_by(dist, batch) %>%
-  summarize(countSigT=sum(isSig_t),
-            countSigW=sum(isSig_w),
-            countSigGLM=sum(isSig_glm),
-            countSigGLMLRT=sum(isSig_glm_lrt),
-            countSigGLMAIC=sum(isSig_glm_AIC),
-            countSigGLMAICu=sum(isSig_glm_AICu),
-            countSigAOV=sum(isSig_aov),
-            n=n()) %>%
-  mutate(fracSigT=countSigT/n,
-         fracSigW=countSigW/n,
-         fracSigGLM=countSigGLM/n,
-         fracSigGLMLRT=countSigGLMLRT/n,
-         fracSigGLMAIC=countSigGLMAIC/n,
-         fracSigGLMAICu=countSigGLMAICu/n,
-         fracSigAOV=countSigAOV/n,
-  ) %>%
-  ungroup() %>%
-  dplyr::select(dist, batch, fracSigT, fracSigW, fracSigGLM,
-                fracSigGLMLRT, fracSigGLMAIC, fracSigGLMAICu, fracSigAOV) %>%
-  pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
-               names_prefix = "fracSig", values_to = "fracSig")
+###### merge
+wormSimBatchBeta_regression_testsummary_n24<-rbind(wormSimBatchBeta.1.5.100runs_testsummary,
+                                               wormSimBatchBeta.1.5.100runs.6reps_testsummary,
+                                               wormSimBatchBeta.1.5.100runs.12reps_testsummary,
+                                               wormSimBatchBeta.5.5.100runs.3reps_testsummary,
+                                               wormSimBatchBeta.5.5.100runs.6reps_testsummary,
+                                               wormSimBatchBeta.5.5.100runs.12reps_testsummary)
+# fix labels
+wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="T"]<-"t-test"
+wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="W"]<-"Wilcoxon"
+wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="GLMAICu"]<-"GLM AIC Full"
+wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="GLMAIC"]<-"GLM AIC"
 
-# did using LRT help with false positives? kinda!
-wormSimBatchBeta.5.5.100runs_testsummary %>%
+wormSimBatchBeta_regression_testsummary_n24$n_samples<-24
+
+wormSimBatchBeta_regression_testsummary_n24<-wormSimBatchBeta_regression_testsummary_n24 %>%
+  mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
+  mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+
+  
+#### and plot
+pwormSimBatchBeta_regression_testsummary_n24<-wormSimBatchBeta_regression_testsummary_n24 %>%
   ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
   geom_col(position=position_dodge())+
   geom_hline(yintercept=0.05)+
+  ylim(-0.01, 1)+
+  scale_fill_viridis_d(direction=-1)+
   theme_bw()+
   theme(
     text=element_text(size=xTextSize), 
     plot.title=element_text(hjust=0.5)
   )+
+  facet_grid(vars(dist), vars(text_reps))+
   labs(x="Batch Size", y="Fraction Significant", fill="Test",
-       title="Test Results, Beta(5,5)")
+       title="Test Results, Data With Replicates, n=24")
+pwormSimBatchBeta_regression_testsummary_n24
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# with lower n?
+# n=12 data points per simulated replicate
+wormSimBatchBeta.1.5.100runs.n12.3reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=12, runs=100, reps=3)
+wormSimBatchBeta.1.5.100runs.n12.3reps.summary<-wormSimBatchBeta.1.5.100runs.n12.3reps$data_summary
+rm(wormSimBatchBeta.1.5.100runs.n12.3reps)
+wormSimBatchBeta.1.5.100runs.n12.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.n12.3reps.summary)
+wormSimBatchBeta.1.5.100runs.n12.3reps_testsummary$nreps<-3
+rm(wormSimBatchBeta.1.5.100runs.n12.3reps.summary)
+
+wormSimBatchBeta.1.5.100runs.n12.6reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=12, runs=100, reps=6)
+wormSimBatchBeta.1.5.100runs.n12.6reps.summary<-wormSimBatchBeta.1.5.100runs.n12.6reps$data_summary
+rm(wormSimBatchBeta.1.5.100runs.n12.6reps)
+wormSimBatchBeta.1.5.100runs.n12.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.n12.6reps.summary)
+wormSimBatchBeta.1.5.100runs.n12.6reps_testsummary$nreps<-6
+rm(wormSimBatchBeta.1.5.100runs.n12.6reps.summary)
+
+wormSimBatchBeta.1.5.100runs.n12.12reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=12, runs=100, reps=12)
+wormSimBatchBeta.1.5.100runs.n12.12reps.summary<-wormSimBatchBeta.1.5.100runs.n12.12reps$data_summary
+rm(wormSimBatchBeta.1.5.100runs.n12.12reps)
+wormSimBatchBeta.1.5.100runs.n12.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.n12.12reps.summary)
+wormSimBatchBeta.1.5.100runs.n12.12reps_testsummary$nreps<-12
+rm(wormSimBatchBeta.1.5.100runs.n12.12reps.summary)
+
+wormSimBatchBeta.5.5.100runs.n12.3reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=12, runs=100, reps=3)
+wormSimBatchBeta.5.5.100runs.n12.3reps.summary<-wormSimBatchBeta.5.5.100runs.n12.3reps$data_summary
+rm(wormSimBatchBeta.5.5.100runs.n12.3reps)
+wormSimBatchBeta.5.5.100runs.n12.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.n12.3reps.summary)
+wormSimBatchBeta.5.5.100runs.n12.3reps_testsummary$nreps<-3
+rm(wormSimBatchBeta.5.5.100runs.n12.3reps.summary)
+
+wormSimBatchBeta.5.5.100runs.n12.6reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=12, runs=100, reps=6)
+wormSimBatchBeta.5.5.100runs.n12.6reps.summary<-wormSimBatchBeta.5.5.100runs.n12.6reps$data_summary
+rm(wormSimBatchBeta.5.5.100runs.n12.6reps)
+wormSimBatchBeta.5.5.100runs.n12.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.n12.6reps.summary)
+wormSimBatchBeta.5.5.100runs.n12.6reps_testsummary$nreps<-6
+rm(wormSimBatchBeta.5.5.100runs.n12.6reps.summary)
+
+wormSimBatchBeta.5.5.100runs.n12.12reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=12, runs=100, reps=12)
+wormSimBatchBeta.5.5.100runs.n12.12reps.summary<-wormSimBatchBeta.5.5.100runs.n12.12reps$data_summary
+rm(wormSimBatchBeta.5.5.100runs.n12.12reps)
+wormSimBatchBeta.5.5.100runs.n12.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.n12.12reps.summary)
+wormSimBatchBeta.5.5.100runs.n12.12reps_testsummary$nreps<-12
+rm(wormSimBatchBeta.5.5.100runs.n12.12reps.summary)
+
+wormSimBatchBeta_regression_testsummary_n12<-rbind(wormSimBatchBeta.1.5.100runs.n12.3reps_testsummary,
+                                                   wormSimBatchBeta.1.5.100runs.n12.6reps_testsummary,
+                                                   wormSimBatchBeta.1.5.100runs.n12.12reps_testsummary,
+                                                   wormSimBatchBeta.5.5.100runs.n12.3reps_testsummary,
+                                                   wormSimBatchBeta.5.5.100runs.n12.6reps_testsummary,
+                                                   wormSimBatchBeta.5.5.100runs.n12.12reps_testsummary)
+
+# fix labels
+wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="T"]<-"t-test"
+wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="W"]<-"Wilcoxon"
+wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="GLMAICu"]<-"GLM AIC Full"
+wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="GLMAIC"]<-"GLM AIC"
+
+wormSimBatchBeta_regression_testsummary_n12<-wormSimBatchBeta_regression_testsummary_n12 %>%
+  mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
+  mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+wormSimBatchBeta_regression_testsummary_n12$n_samples<-12
+
+pwormSimBatchBeta_regression_testsummary_n12<-wormSimBatchBeta_regression_testsummary_n12 %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  ylim(-0.01, 1)+
+  scale_fill_viridis_d(direction=-1)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  facet_grid(vars(dist), vars(text_reps))+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Test Results, Data With Replicates, n=12")
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# summarize the simulated factorial data
-wormSimF.1.5.summary<-wormSimF.1.5 %>%
-  group_by(set, batch, run) %>%
-  summarize(meanCFU=mean(CFU, na.rm=TRUE),
-            varCFU=var(CFU, na.rm=TRUE),
-            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
-            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
-            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
-            n=n()
-            )
-view(wormSimF.1.5.summary)
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# with lower n?
+# n=6 data points per simulated replicate
+wormSimBatchBeta.1.5.100runs.n6.3reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=6, runs=100, reps=3)
+wormSimBatchBeta.1.5.100runs.n6.3reps.summary<-wormSimBatchBeta.1.5.100runs.n6.3reps$data_summary
+rm(wormSimBatchBeta.1.5.100runs.n6.3reps)
+wormSimBatchBeta.1.5.100runs.n6.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.n6.3reps.summary)
+wormSimBatchBeta.1.5.100runs.n6.3reps_testsummary$nreps<-3
+rm(wormSimBatchBeta.1.5.100runs.n6.3reps.summary)
 
-wormSimF.1.5.summary %>%
-  ggplot(aes(x=batch, y=varCFU))+
+wormSimBatchBeta.1.5.100runs.n6.6reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=6, runs=100, reps=6)
+wormSimBatchBeta.1.5.100runs.n6.6reps.summary<-wormSimBatchBeta.1.5.100runs.n6.6reps$data_summary
+rm(wormSimBatchBeta.1.5.100runs.n6.6reps)
+wormSimBatchBeta.1.5.100runs.n6.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.n6.6reps.summary)
+wormSimBatchBeta.1.5.100runs.n6.6reps_testsummary$nreps<-6
+rm(wormSimBatchBeta.1.5.100runs.n6.6reps.summary)
+
+wormSimBatchBeta.1.5.100runs.n6.12reps<-wormSimBatchBeta3(a=1, b=5, nWorms=5000, maxSamples=6, runs=100, reps=12)
+wormSimBatchBeta.1.5.100runs.n6.12reps.summary<-wormSimBatchBeta.1.5.100runs.n6.12reps$data_summary
+rm(wormSimBatchBeta.1.5.100runs.n6.12reps)
+wormSimBatchBeta.1.5.100runs.n6.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1.5.100runs.n6.12reps.summary)
+wormSimBatchBeta.1.5.100runs.n6.12reps_testsummary$nreps<-12
+rm(wormSimBatchBeta.1.5.100runs.n6.12reps.summary)
+
+wormSimBatchBeta.5.5.100runs.n6.3reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=6, runs=100, reps=3)
+wormSimBatchBeta.5.5.100runs.n6.3reps.summary<-wormSimBatchBeta.5.5.100runs.n6.3reps$data_summary
+rm(wormSimBatchBeta.5.5.100runs.n6.3reps)
+wormSimBatchBeta.5.5.100runs.n6.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.n6.3reps.summary)
+wormSimBatchBeta.5.5.100runs.n6.3reps_testsummary$nreps<-3
+rm(wormSimBatchBeta.5.5.100runs.n6.3reps.summary)
+
+wormSimBatchBeta.5.5.100runs.n6.6reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=6, runs=100, reps=6)
+wormSimBatchBeta.5.5.100runs.n6.6reps.summary<-wormSimBatchBeta.5.5.100runs.n6.6reps$data_summary
+rm(wormSimBatchBeta.5.5.100runs.n6.6reps)
+wormSimBatchBeta.5.5.100runs.n6.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.n6.6reps.summary)
+wormSimBatchBeta.5.5.100runs.n6.6reps_testsummary$nreps<-6
+rm(wormSimBatchBeta.5.5.100runs.n6.6reps.summary)
+
+wormSimBatchBeta.5.5.100runs.n6.12reps<-wormSimBatchBeta3(a=5, b=5, nWorms=5000, maxSamples=6, runs=100, reps=12)
+wormSimBatchBeta.5.5.100runs.n6.12reps.summary<-wormSimBatchBeta.5.5.100runs.n6.12reps$data_summary
+rm(wormSimBatchBeta.5.5.100runs.n6.12reps)
+wormSimBatchBeta.5.5.100runs.n6.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.5.5.100runs.n6.12reps.summary)
+wormSimBatchBeta.5.5.100runs.n6.12reps_testsummary$nreps<-12
+rm(wormSimBatchBeta.5.5.100runs.n6.12reps.summary)
+
+wormSimBatchBeta_regression_testsummary_n6<-rbind(wormSimBatchBeta.1.5.100runs.n6.3reps_testsummary,
+                                                   wormSimBatchBeta.1.5.100runs.n6.6reps_testsummary,
+                                                   wormSimBatchBeta.1.5.100runs.n6.12reps_testsummary,
+                                                   wormSimBatchBeta.5.5.100runs.n6.3reps_testsummary,
+                                                   wormSimBatchBeta.5.5.100runs.n6.6reps_testsummary,
+                                                   wormSimBatchBeta.5.5.100runs.n6.12reps_testsummary)
+
+# fix labels
+wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="T"]<-"t-test"
+wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="W"]<-"Wilcoxon"
+wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="GLMAICu"]<-"GLM AIC Full"
+wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="GLMAIC"]<-"GLM AIC"
+
+wormSimBatchBeta_regression_testsummary_n6$n_samples<-6
+
+wormSimBatchBeta_regression_testsummary_n6<-wormSimBatchBeta_regression_testsummary_n6 %>%
+  mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
+  mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+
+pwormSimBatchBeta_regression_testsummary_n6<-wormSimBatchBeta_regression_testsummary_n6 %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  ylim(-0.01, 1)+
+  scale_fill_viridis_d(direction=-1)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  facet_grid(vars(dist), vars(text_reps))+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Test Results, Data With Replicates, n=6")
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# And comparing two different distributions?
+# With 12 samples per data set
+wormSimBatchBeta.1v2.5.100runs.n12.3reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=12, runs=100, reps=3, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary<-wormSimBatchBeta.1v2.5.100runs.n12.3reps$data_summary
+glimpse(wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary)
+rm(wormSimBatchBeta.1v2.5.100runs.n12.3reps)
+wormSimBatchBeta.1v2.5.100runs.n12.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n12.3reps_testsummary$nreps<-3
+rm(wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary)
+
+wormSimBatchBeta.1v2.5.100runs.n12.6reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=12, runs=100, reps=6, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary<-wormSimBatchBeta.1v2.5.100runs.n12.6reps$data_summary
+glimpse(wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary)
+rm(wormSimBatchBeta.1v2.5.100runs.n12.6reps)
+wormSimBatchBeta.1v2.5.100runs.n12.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n12.6reps_testsummary$nreps<-6
+rm(wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary)
+
+wormSimBatchBeta.1v2.5.100runs.n12.12reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=12, runs=100, reps=12, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n12.12reps.summary<-wormSimBatchBeta.1v2.5.100runs.n12.12reps$data_summary
+rm(wormSimBatchBeta.1v2.5.100runs.n12.12reps)
+wormSimBatchBeta.1v2.5.100runs.n12.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n12.12reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n12.12reps_testsummary$nreps<-12
+rm(wormSimBatchBeta.1v2.5.100runs.n12.12reps.summary)
+
+wormSimBatchBeta.1v2.5_regression_testsummary_n12<-rbind(wormSimBatchBeta.1v2.5.100runs.n12.3reps_testsummary,
+                                                  wormSimBatchBeta.1v2.5.100runs.n12.6reps_testsummary,
+                                                  wormSimBatchBeta.1v2.5.100runs.n12.12reps_testsummary
+                                                  )
+
+# fix labels
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="T"]<-"t-test"
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="W"]<-"Wilcoxon"
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="GLMAICu"]<-"GLM AIC Full"
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="GLMAIC"]<-"GLM AIC"
+
+wormSimBatchBeta.1v2.5_regression_testsummary_n12<-wormSimBatchBeta.1v2.5_regression_testsummary_n12 %>%
+  mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
+  mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$n_samples<-12
+
+pwormSimBatchBeta.1v2.5_regression_testsummary_n12<-wormSimBatchBeta.1v2.5_regression_testsummary_n12 %>%
+  ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
+  geom_col(position=position_dodge())+
+  geom_hline(yintercept=0.05)+
+  ylim(-0.01, 1)+
+  scale_fill_viridis_d(direction=-1)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  facet_wrap(~text_reps)+
+  labs(x="Batch Size", y="Fraction Significant", fill="Test",
+       title="Beta(1,5) vs Beta(2,5), n=12")
+pwormSimBatchBeta.1v2.5_regression_testsummary_n12
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# FIGURE S9  
+# combine plots
+pwormSimBatchBeta_regression_testsummary_n6 + pwormSimBatchBeta_regression_testsummary_n12 + 
+  pwormSimBatchBeta_regression_testsummary_n24 + pwormSimBatchBeta.1v2.5_regression_testsummary_n12 +
+  plot_annotation(tag_levels = "A") + plot_layout(ncol=2, guides="collect")
+ggsave("FigS9_wormSimBatchBeta_regression.png", width=12, height=10, units="in", dpi=300)
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# more canonical - plot tradeoffs?
+
+#~~~~~~~~~~~~~~~~~~~~
+# Finish rounding out the beta(1,5) vs B(2,5) comparisons
+# With n=6
+wormSimBatchBeta.1v2.5.100runs.n6.3reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=6, runs=100, reps=3, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary<-wormSimBatchBeta.1v2.5.100runs.n6.3reps$data_summary
+glimpse(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
+rm(wormSimBatchBeta.1v2.5.100runs.n6.3reps)
+wormSimBatchBeta.1v2.5.100runs.n6.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n6.3reps_testsummary$nreps<-3
+rm(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
+
+wormSimBatchBeta.1v2.5.100runs.n6.6reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=6, runs=100, reps=6, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary<-wormSimBatchBeta.1v2.5.100runs.n6.6reps$data_summary
+glimpse(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
+rm(wormSimBatchBeta.1v2.5.100runs.n6.6reps)
+wormSimBatchBeta.1v2.5.100runs.n6.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n6.6reps_testsummary$nreps<-6
+rm(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
+
+wormSimBatchBeta.1v2.5.100runs.n6.12reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=6, runs=100, reps=12, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n6.12reps.summary<-wormSimBatchBeta.1v2.5.100runs.n6.12reps$data_summary
+rm(wormSimBatchBeta.1v2.5.100runs.n6.12reps)
+wormSimBatchBeta.1v2.5.100runs.n6.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n6.12reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n6.12reps_testsummary$nreps<-12
+rm(wormSimBatchBeta.1v2.5.100runs.n6.12reps.summary)
+
+wormSimBatchBeta.1v2.5_regression_testsummary_n6<-rbind(wormSimBatchBeta.1v2.5.100runs.n6.3reps_testsummary,
+                                                         wormSimBatchBeta.1v2.5.100runs.n6.6reps_testsummary,
+                                                         wormSimBatchBeta.1v2.5.100runs.n6.12reps_testsummary)
+
+# fix labels
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="T"]<-"t-test"
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="W"]<-"Wilcoxon"
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="GLMAICu"]<-"GLM AIC Full"
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="GLMAIC"]<-"GLM AIC"
+
+wormSimBatchBeta.1v2.5_regression_testsummary_n6<-wormSimBatchBeta.1v2.5_regression_testsummary_n6 %>%
+  mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
+  mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$n_samples<-6
+
+#~~~~~~~~~~~~~~~~~~~~
+# With n=24
+wormSimBatchBeta.1v2.5.100runs.n24.3reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=24, runs=100, reps=3, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary<-wormSimBatchBeta.1v2.5.100runs.n24.3reps$data_summary
+#glimpse(wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary)
+rm(wormSimBatchBeta.1v2.5.100runs.n24.3reps)
+wormSimBatchBeta.1v2.5.100runs.n24.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n24.3reps_testsummary$nreps<-3
+rm(wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary)
+
+wormSimBatchBeta.1v2.5.100runs.n24.6reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=24, runs=100, reps=6, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary<-wormSimBatchBeta.1v2.5.100runs.n24.6reps$data_summary
+#glimpse(wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary)
+rm(wormSimBatchBeta.1v2.5.100runs.n24.6reps)
+wormSimBatchBeta.1v2.5.100runs.n24.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n24.6reps_testsummary$nreps<-6
+rm(wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary)
+
+wormSimBatchBeta.1v2.5.100runs.n24.12reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=24, runs=100, reps=12, sameParams=FALSE)
+wormSimBatchBeta.1v2.5.100runs.n24.12reps.summary<-wormSimBatchBeta.1v2.5.100runs.n24.12reps$data_summary
+rm(wormSimBatchBeta.1v2.5.100runs.n24.12reps)
+wormSimBatchBeta.1v2.5.100runs.n24.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n24.12reps.summary)
+wormSimBatchBeta.1v2.5.100runs.n24.12reps_testsummary$nreps<-12
+rm(wormSimBatchBeta.1v2.5.100runs.n24.12reps.summary)
+
+wormSimBatchBeta.1v2.5_regression_testsummary_n24<-rbind(wormSimBatchBeta.1v2.5.100runs.n24.3reps_testsummary,
+                                                        wormSimBatchBeta.1v2.5.100runs.n24.6reps_testsummary,
+                                                        wormSimBatchBeta.1v2.5.100runs.n24.12reps_testsummary)
+
+# fix labels
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="T"]<-"t-test"
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="W"]<-"Wilcoxon"
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="GLMAICu"]<-"GLM AIC Full"
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="GLMAIC"]<-"GLM AIC"
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$n_samples<-24
+
+wormSimBatchBeta.1v2.5_regression_testsummary_n24<-wormSimBatchBeta.1v2.5_regression_testsummary_n24 %>%
+  mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
+  mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$n_samples<-24
+
+#~~~~~~~~~~~
+# merge data for n=12 samples
+glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n12)
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$fracCorrect<-wormSimBatchBeta.1v2.5_regression_testsummary_n12$fracSig
+unique(wormSimBatchBeta.1v2.5_regression_testsummary_n12$distB)
+glimpse(wormSimBatchBeta_regression_testsummary_n12)
+wormSimBatchBeta_regression_testsummary_n12$fracCorrect<-1-wormSimBatchBeta_regression_testsummary_n12$fracSig
+
+# all with 12 samples
+wormSimBatchBeta_regression_testsummary_n12_merge<-rbind(wormSimBatchBeta_regression_testsummary_n12,
+                                                   wormSimBatchBeta.1v2.5_regression_testsummary_n12)
+
+
+# plot
+pwormSimBatchBeta_regression_testsummary_n12_merge<-wormSimBatchBeta_regression_testsummary_n12_merge %>%
+  dplyr::filter(distB!="Beta(5,5)") %>%
+  ggplot(aes(x=factor(batch), y=fracCorrect, color=test))+
+#  ggplot(aes(x=factor(batch), y=fracCorrect, color=test, linetype=factor(text_reps)))+
   geom_point()+
-  scale_y_log10()
+#  geom_path(aes(group=test))+
+  geom_line(aes(group=test, linetype=factor(distB)))+
+  ylim(-0.01, 1)+
+  scale_color_viridis_d(option="turbo", direction=-1)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  facet_wrap(vars(distB, text_reps))+
+#  facet_wrap(vars(text_reps))+
+#  facet_grid(~text_reps)+
+#  facet_grid(~distB)+
+  labs(x="Batch Size", y="Fraction Correct", color="Test",
+       linetype="Dist2", 
+       title="Beta(1,5) vs Dist2, n=12")
 
-wormSimF.1.5.summary %>%
-  ggplot(aes(x=batch, y=meanCFU))+
+# how to get these lines on the same plot? idk yet
+
+#~~~~~~~~~~~
+# merge data for n=6 samples
+glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n6)
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$fracCorrect<-wormSimBatchBeta.1v2.5_regression_testsummary_n6$fracSig
+unique(wormSimBatchBeta.1v2.5_regression_testsummary_n6$distB)
+glimpse(wormSimBatchBeta_regression_testsummary_n6)
+wormSimBatchBeta_regression_testsummary_n6$fracCorrect<-1-wormSimBatchBeta_regression_testsummary_n6$fracSig
+
+# all with 12 samples
+wormSimBatchBeta_regression_testsummary_n6_merge<-rbind(wormSimBatchBeta_regression_testsummary_n6,
+                                                         wormSimBatchBeta.1v2.5_regression_testsummary_n6)
+
+
+# plot
+pwormSimBatchBeta_regression_testsummary_n6_merge<-wormSimBatchBeta_regression_testsummary_n6_merge %>%
+  dplyr::filter(distB!="Beta(5,5)") %>%
+  ggplot(aes(x=factor(batch), y=fracCorrect, color=test))+
+  #  ggplot(aes(x=factor(batch), y=fracCorrect, color=test, linetype=factor(text_reps)))+
   geom_point()+
-  scale_y_log10()
+  #  geom_path(aes(group=test))+
+  geom_line(aes(group=test, linetype=factor(distB)))+
+  ylim(-0.01, 1)+
+  scale_color_viridis_d(option="turbo", direction=-1)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  facet_wrap(vars(distB, text_reps))+
+  #  facet_wrap(vars(text_reps))+
+  #  facet_grid(~text_reps)+
+  #  facet_grid(~distB)+
+  labs(x="Batch Size", y="Fraction Correct", color="Test",
+       linetype="Dist2", 
+       title="Beta(1,5) vs Dist2, n=6")
 
-wormSimF.5.5.summary<-wormSimF.5.5 %>%
-  group_by(set, batch, run) %>%
-  summarize(meanCFU=mean(CFU, na.rm=TRUE),
-            varCFU=var(CFU, na.rm=TRUE),
-            q25CFU=quantile(CFU,probs=0.25, na.rm=TRUE),
-            medianCFU=quantile(CFU,probs=0.5, na.rm=TRUE),
-            q75CFU=quantile(CFU,probs=0.75, na.rm=TRUE),
-            n=n()
-  )
-view(wormSimF.5.5.summary)
-wormSimF.5.5.summary %>%
-  ggplot(aes(x=batch, y=varCFU))+
+#~~~~~~~~~~~
+# merge data for n=24 samples
+glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n24)
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$fracCorrect<-wormSimBatchBeta.1v2.5_regression_testsummary_n24$fracSig
+unique(wormSimBatchBeta.1v2.5_regression_testsummary_n24$distB)
+glimpse(wormSimBatchBeta_regression_testsummary_n24)
+wormSimBatchBeta_regression_testsummary_n24$fracCorrect<-1-wormSimBatchBeta_regression_testsummary_n24$fracSig
+
+# all with 24 samples
+wormSimBatchBeta_regression_testsummary_n24_merge<-rbind(wormSimBatchBeta_regression_testsummary_n24,
+                                                         wormSimBatchBeta.1v2.5_regression_testsummary_n24)
+
+
+# plot
+pwormSimBatchBeta_regression_testsummary_n24_merge<-wormSimBatchBeta_regression_testsummary_n24_merge %>%
+  dplyr::filter(distB!="Beta(5,5)") %>%
+  ggplot(aes(x=factor(batch), y=fracCorrect, color=test))+
+  #  ggplot(aes(x=factor(batch), y=fracCorrect, color=test, linetype=factor(text_reps)))+
   geom_point()+
-  scale_y_log10()
+  #  geom_path(aes(group=test))+
+  geom_line(aes(group=test, linetype=factor(distB)))+
+  ylim(-0.01, 1)+
+  scale_color_viridis_d(option="turbo", direction=-1)+
+  theme_bw()+
+  theme(
+    text=element_text(size=xTextSize), 
+    plot.title=element_text(hjust=0.5)
+  )+
+  facet_wrap(vars(distB, text_reps))+
+  #  facet_wrap(vars(text_reps))+
+  #  facet_grid(~text_reps)+
+  #  facet_grid(~distB)+
+  labs(x="Batch Size", y="Fraction Correct", color="Test",
+       linetype="Dist2", 
+       title="Beta(1,5) vs Dist2, n=24")
 
-#~~~~~~~~~~~~~~~~~~~~~~~
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # plot together
-wormSimF.5.5.summary$Distribution<-"Beta(5,5)"
-wormSimF.1.5.summary$Distribution<-"Beta(1,5)"
-wormSimF.summary<-rbind(wormSimF.1.5.summary, wormSimF.5.5.summary)
-wormSimF.summary %>%
-  ggplot(aes(x=batch, y=varCFU, color=factor(Distribution)))+
-  geom_jitter(width=1)+
-  scale_y_log10()
-
-wormSimF.summary %>%
-  ggplot(aes(x=batch, y=meanCFU, color=factor(Distribution)))+
-  geom_jitter(width=1)+
-  scale_y_log10()
-
-wormSimF.summary %>%
-  ggplot(aes(x=batch, y=medianCFU, color=factor(Distribution)))+
-  geom_jitter(width=1)+
-  scale_y_log10()
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~
-###  again with a different number of runs to check the biological variances
-# SQUARE DESIGN
-wormSimF.1.5.12square<-wormSimBatchBetaFactorial(a=1, b=5, reps=12, runs=12, maxCFU=100000)
-wormSimF.1.5.12square$run<-as.factor(wormSimF.1.5.12square$run)
-wormSimF.1.5.12square.aov10<-wormSimF.1.5.12square %>% dplyr::filter(batch==10) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.12square.aov50<-wormSimF.1.5.12square %>% dplyr::filter(batch==50) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.12square.aov5<-wormSimF.1.5.12square %>% dplyr::filter(batch==5) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.12square.aov20<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.12square.aov1<-wormSimF.1.5.12square %>% dplyr::filter(batch==1) %>% aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.12square.aov1)
-summary(wormSimF.1.5.12square.aov5)
-summary(wormSimF.1.5.12square.aov10)
-summary(wormSimF.1.5.12square.aov20)
-summary(wormSimF.1.5.12square.aov50)
-
-##  pull components from ANOVA summary table?
-wormSimF.1.5.12square.aov1.summary<-summary(wormSimF.1.5.12square.aov1)
-wormSimF.1.5.12square.aov1.summary[[1]] # the summary table
-wormSimF.1.5.12square.aov1.summary[[1]][,2] # SSEs
-wormSimF.1.5.12square.aov1.summary[[1]][,5] # P-vals
-
-# Likelihoods when we allow each run to be unique?
-wormSimF.1.5.12square<-wormSimF.1.5.12square %>%
-  mutate(unique_run=paste(set, run, sep="")) # this is actually a ton of parameters
-#wormSimF.1.5.12square$unique_run<-factor(wormSimF.1.5.12square$unique_run)
-#wormSimF.1.5.12square$set<-factor(wormSimF.1.5.12square$set)
-wormSimF.1.5.12square.aov50u<-wormSimF.1.5.12square %>% dplyr::filter(batch==50) %>% aov(logCFU~set, data=.)
-summary(wormSimF.1.5.12square.aov50u)
-wormSimF.1.5.12square.aov20u<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>% aov(logCFU~set, data=.)
-summary(wormSimF.1.5.12square.aov20u)
-logLik(wormSimF.1.5.12square.aov20)
-logLik(wormSimF.1.5.12square.aov20u)
+pwormSimBatchBeta_regression_testsummary_n6_merge + 
+  pwormSimBatchBeta_regression_testsummary_n12_merge +
+  pwormSimBatchBeta_regression_testsummary_n24_merge +
+  plot_annotation(tag_levels = "A") +
+  plot_layout(guides="collect")
+ggsave("FigureS9_FractionCorrectBeta.png", width=15, height=6, units="in", dpi=300)
+#
+#
 
 
-# comparing models - MSR ratio very near 1
-#lrtest(wormsimF.1.5.12square.aov5u, wormsimF.1.5.12square.aov5)
-#lrtest(wormsimF.1.5.12square.aov10u, wormsimF.1.5.12square.aov10)
-lrtest(wormSimF.1.5.12square.aov20, wormSimF.1.5.12square.aov20u)
-lrtest(wormSimF.1.5.12square.aov50, wormSimF.1.5.12square.aov50u)
-
-# with GLM?
-wormsimF.1.5.12square.glm20<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>%
-  glm(logCFU~run+set, family=Gamma, data=.)
-summary(wormsimF.1.5.12square.glm20)
-wormsimF.1.5.12square.glm20u<-wormSimF.1.5.12square %>% dplyr::filter(batch==20) %>%
-  glm(logCFU~unique_run, family=Gamma, data=.)
-summary(wormsimF.1.5.12square.glm20u)
-logLik(wormsimF.1.5.12square.glm20)
-logLik(wormsimF.1.5.12square.glm20u)
 
 
-wormsimF.1.5.glm.batch50<-wormSimF.1.5 %>%
-  dplyr::filter(batch==50) %>%
-  glm(logCFU~run*set, family=Gamma, data=.)
-summary(wormsimF.1.5.glm.batch50)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-  
-# interesting. MSEs for run and set are very similar in batched
-# see if this holds
-# variability is higher
-wormSimF.1.5.5square<-wormSimBatchBetaFactorial(a=1, b=5, reps=5, runs=5, maxCFU=100000)
-wormSimF.1.5.5square$run<-as.factor(wormSimF.1.5.5square$run)
-wormSimF.1.5.5square.aov10<-wormSimF.1.5.5square %>% dplyr::filter(batch==10) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.5square.aov50<-wormSimF.1.5.5square %>% dplyr::filter(batch==50) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.5square.aov5<-wormSimF.1.5.5square %>% dplyr::filter(batch==5) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.5square.aov20<-wormSimF.1.5.5square %>% dplyr::filter(batch==20) %>% aov(logCFU~run+set, data=.)
-wormSimF.1.5.5square.aov1<-wormSimF.1.5.5square %>% dplyr::filter(batch==1) %>% aov(logCFU~run+set, data=.)
-summary(wormSimF.1.5.5square.aov1)
-summary(wormSimF.1.5.5square.aov5)
-summary(wormSimF.1.5.5square.aov10)
-summary(wormSimF.1.5.5square.aov20)
-summary(wormSimF.1.5.5square.aov50)
 
-#~~~~~~~~~~~~~~~~~~~~~
-# First, non-square designs
 
-factor_dim<-c(3, 5, 8, 10, 12, 15, 20) # squares
-batch_sizes<-c(1, 5, 10, 20, 50)
-iter<-25 # number of times to iterate the simulation
 
-# Create an empty temporary vector of defined size to hold the data
-temp<-vector("list", length=length(batch_sizes)*length(factor_dim)* iter)
-
-idx<-1
+#       CODE BANK - NOT USED
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# loop over square factorials?
+factor_dim<-c(3, 5)
+temp<-vector("list", length=iter*length(factor_dim)*length(factor_dim))
+iter<-100
 for (k in seq_len(iter)){
   for (i in seq_along(factor_dim)){ # loop along dimension of square factorial design
     for (m in seq_along(factor_dim)){ # again
@@ -1615,41 +1939,35 @@ for (k in seq_len(iter)){
 } # close wrap over iterations
 
 # plot out
-wormSimF.1.5.RunRep.summary<-dplyr::bind_rows(temp)
-
-wormSimF.1.5.RunRep.summary_wide <- wormSimF.1.5.RunRep.summary %>%
-  #dplyr::filter(batch>1)%>%
+wormSimF.summary<-dplyr::bind_rows(temp)
+wormSimF.summary_wide <- wormSimF.summary %>%
   pivot_wider(names_from=Component, values_from = c(MSE, p_aov))
-wormSimF.1.5.RunRep.summary_wide %>%
-  ggplot(aes(x=MSE_Run, y=MSE_Set))+
-  geom_point(aes(color=factor(batch)))+
-  #scale_x_log10()+
-  #scale_y_log10()+
-  stat_poly_line(formula=y~x+0)+
-  stat_poly_eq(use_label("eq"), formula = y ~ x + 0)
-
-wormSimF.1.5.RunRep.summary_wide<-wormSimF.1.5.RunRep.summary_wide%>%
+wormSimF.summary_wide<-wormSimF.summary_wide%>%
   mutate(MSE_ratio=MSE_Set/MSE_Run)
+#wormSimF.1.5.RunRep.summary_wide %>%
+#  ggplot(aes(x=MSE_Run, y=MSE_Set))+
+#  geom_point(aes(color=factor(batch)))+
+#  #scale_x_log10()+
+#  #scale_y_log10()+
+#  stat_poly_line(formula=y~x+0)+
+#  stat_poly_eq(use_label("eq"), formula = y ~ x + 0)
+
 
 # plot distributions of MSE ratio for Beta(1,5) vs Beta(1,5)
-wormSimF.1.5.RunRep.summary_wide %>%
+wormSimF.summary_wide %>%
   ggplot(aes(y=MSE_ratio, x=factor(n_reps), color=factor(batch)))+
   geom_boxplot()+
   scale_y_log10()+
   geom_hline(yintercept = 1)+
   facet_grid(~n_runs)
 
-wormSimF.1.5.RunRep.summary_wide %>%
+wormSimF.summary_wide %>%
   ggplot(aes(x=log10(MSE_ratio), fill=factor(batch)))+
   geom_histogram()+
-  #scale_y_log10()+
-  #geom_hline(yintercept = 1)+
   facet_grid(vars(n_runs), vars(batch))
 
-
-
 # p values?
-wormSimF.1.5.RunRep.summary %>%
+wormSimF.summary %>%
   dplyr::filter(Component=="Set") %>%
   ggplot(aes(x=factor(batch), y=p_aov, color=factor(n_reps)))+
   geom_boxplot()+
@@ -1657,7 +1975,7 @@ wormSimF.1.5.RunRep.summary %>%
   scale_y_log10()+
   facet_grid(~n_runs)
 
-wormSimF.1.5.RunRep.summary %>%
+wormSimF.summary %>%
   dplyr::filter(Component=="Set") %>%
   ggplot(aes(x=factor(batch), y=p_w, color=factor(n_reps)))+
   geom_boxplot()+
@@ -1784,184 +2102,10 @@ for (k in seq_len(iter)){
 
 # plot out data
 ggplot(temp.square, aes(x=factor(batch), y=logCFU))+geom_jitter(width=0.1)+facet_wrap(~set)
-
-# some tests
-temp.square.2beta.glm.batch1<-temp.square %>%
-  dplyr::filter(batch==1) %>%
-  glm(logCFU~run+set, family=Gamma, data=.)
-summary(temp.square.2beta.glm.batch1)
-
-temp.square.2beta.glm.batch5<-temp.square %>%
-  dplyr::filter(batch==5) %>%
-  glm(logCFU~run+set, family=Gamma, data=.)
-summary(temp.square.2beta.glm.batch5)
-temp.square.2beta.glm.batch5u<-temp.square %>%
-  dplyr::filter(batch==5) %>%
-  glm(logCFU~set, family=Gamma, data=.)
-summary(temp.square.2beta.glm.batch5u)
-lrtest(temp.square.2beta.glm.batch5, temp.square.2beta.glm.batch5u)
-
-temp.square.2beta.glm.batch10<-temp.square %>%
-  dplyr::filter(batch==10) %>%
-  glm(logCFU~run+set, family=Gamma, data=.)
-summary(temp.square.2beta.glm.batch10)
-temp.square.2beta.glm.batch10u<-temp.square %>%
-  dplyr::filter(batch==10) %>%
-  glm(logCFU~set, family=Gamma, data=.)
-summary(temp.square.2beta.glm.batch10u)
-lrtest(temp.square.2beta.glm.batch10, temp.square.2beta.glm.batch10u)
-
-temp.square.2beta.glm.batch20<-temp.square %>%
-  dplyr::filter(batch==20) %>%
-  glm(logCFU~run+set, family=Gamma, data=.)
-summary(temp.square.2beta.glm.batch20)
-temp.square.2beta.glm.batch20u<-temp.square %>%
-  dplyr::filter(batch==20) %>%
-  glm(logCFU~set, family=Gamma, data=.)
-summary(temp.square.2beta.glm.batch20u)
-lrtest(temp.square.2beta.glm.batch20, temp.square.2beta.glm.batch20u)
-
-
-# plot out summary
 wormSimF.TwoBeta.square.summary<-dplyr::bind_rows(temp)
-
-# p values
-wormSimF.TwoBeta.square.summary %>%
-  dplyr::filter(Component=="Set") %>%
-  ggplot(aes(x=factor(batch), y=p_aov, color=factor(n_reps)))+
-  geom_boxplot()+
-  geom_hline(yintercept = 0.05)+
-  scale_y_log10()
-
-wormSimF.TwoBeta.square.summary %>%
-  dplyr::filter(Component=="Set") %>%
-  ggplot(aes(x=factor(batch), y=p_w, color=factor(n_reps)))+
-  geom_boxplot()+
-  geom_hline(yintercept = 0.05)+
-  scale_y_log10()
-
-# MSE
 wormSimF.TwoBeta.square.summary_wide <- wormSimF.TwoBeta.square.summary %>%
   #dplyr::filter(batch>1)%>%
   pivot_wider(names_from=Component, values_from = c(MSE, p_aov))
 wormSimF.TwoBeta.square.summary_wide<-wormSimF.TwoBeta.square.summary_wide%>%
   mutate(MSE_ratio=MSE_Set/MSE_Run)
 glimpse(wormSimF.TwoBeta.square.summary_wide)
-
-wormSimF.TwoBeta.square.summary_wide %>%
-  ggplot(aes(y=MSE_ratio, x=factor(n_reps), color=factor(batch)))+
-  geom_boxplot()+
-  scale_y_log10()+
-  geom_hline(yintercept = 1)
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# combine simulated data sets
-wormSimF.1.5.RunRep.summary$Condition<-"Beta(1,5)"
-wormSimF.1.5.square.summary$Condition<-"Beta(1,5) Square"
-wormSimF.TwoBeta.square.summary$Condition<-"B(1,5) vs B(2,5)"
-
-wormSimF.Beta.Factorial<-rbind(wormSimF.1.5.RunRep.summary,
-                               wormSimF.1.5.square.summary,
-                               wormSimF.TwoBeta.square.summary)
-glimpse(wormSimF.Beta.Factorial)
-
-wormSimF.1.5.RunRep.summary_wide$Condition<-"Beta(1,5)"
-wormSimF.1.5.square.summary_wide$Condition<-"Beta(1,5) Square"
-wormSimF.TwoBeta.square.summary_wide$Condition<-"B(1,5) vs B(2,5)"
-
-wormSimF.Beta.Factorial_wide<-rbind(wormSimF.1.5.RunRep.summary_wide,
-                                    wormSimF.1.5.square.summary_wide,
-                                    wormSimF.TwoBeta.square.summary_wide)
-glimpse(wormSimF.Beta.Factorial_wide)
-
-# Generate summary table for p values for set to set comparisons
-wormSimF.Beta.Factorial.pvals<-wormSimF.Beta.Factorial %>%
-  dplyr::filter(Component=="Run") %>%
-  mutate(isSig_aov = as.integer(p_aov<=0.05),
-         isSig_w=as.integer(p_w<=0.05)) %>%
-  group_by(Condition, n_reps, n_runs, batch) %>%
-  summarize(psig_aov=sum(isSig_aov),
-            psig_w=sum(isSig_w),
-            n=n()
-            )
-wormSimF.Beta.Factorial.pvals <- wormSimF.Beta.Factorial.pvals %>%
-  mutate(fsig_aov=psig_aov/n,
-         fsig_w=psig_w/n)
-view(wormSimF.Beta.Factorial.pvals)
-
-# Fraction of significant p-values for run in ANOVA
-wormSimF.Beta.Factorial.pvals %>%
-  ggplot(aes(x=factor(batch), y=fsig_aov, color=factor(Condition)))+
-  geom_boxplot()+
-  geom_hline(yintercept = 0.05)+
-  labs(x="Batch Size", y="Fraction Significant, Run", title="ANOVA",
-       color="")
-
-# Fraction of significant p-values for run in Wilcoxon
-wormSimF.Beta.Factorial.pvals %>%
-  ggplot(aes(x=factor(batch), y=fsig_w, color=factor(Condition)))+
-  geom_boxplot()+
-  geom_hline(yintercept = 0.05)+
-  labs(x="Batch Size", y="Fraction Significant, Run", title="Wilcoxon",
-       color="")
-
-# MSE ratio
-wormSimF.Beta.Factorial_wide %>%
-  ggplot(aes(y=MSE_ratio, x=factor(batch), color=factor(n_reps)))+
-  geom_boxplot()+
-  scale_y_log10()+
-  geom_hline(yintercept = 1)+
-  facet_wrap(~Condition)+
-  labs(x="Batch Size", y=expression(MSE[Run]*"/"*MSE[Replicate]), title="MSE Ratio",
-       color="Replicates")
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-# Simulate data from named distributions for comparison
-# let's take the SA single-worm data set (three runs with D0 plated)
-
-SaCount<- SaSeCount %>%
-  dplyr::filter(Condition=="SA")
-
-SaCount6<-SaCount %>%
-  dplyr::filter(Run==6)
-
-# simulate data from stats of individual worm real data
-SaCount6_distributions<-sim_means_named(input_data=SaCount6, n_reps=12, n_runs=12, correction_constant = 20)
-
-# Diagnostic plots
-SaCount6_distributions %>%
-  ggplot(aes(x=factor(Batch), y=logFinalCount, color=factor(Run)))+
-  geom_jitter(width=0.1)+
-  facet_wrap(~dist_name)
-
-SaCount6_distributions_summary<-SaCount6_distributions %>%
-  group_by(dist_name, Batch, Run) %>%
-  summarize(meanTotal=mean(FinalCount, na.rm=TRUE),
-            sdTotal=sd(FinalCount, na.rm=TRUE),
-            n=n()
-  )
-
-SaCount6_distributions_summary<-SaCount6_distributions_summary %>%
-  mutate(cvTotal=sdTotal/meanTotal)
-view(SaCount6_distributions_summary)
-
-SaCount6_distributions_summary %>%
-  ggplot(aes(x=factor(Batch), y=cvTotal, color=factor(dist_name)))+
-  #geom_jitter(width=1)+
-  geom_boxplot()+
-  scale_color_viridis_d(option="turbo")
-
-SaCount6_distributions_summary %>%
-  ggplot(aes(x=factor(Batch), y=meanTotal, color=factor(dist_name)))+
-  geom_jitter(width=0.1)+
-  scale_y_log10()+
-  scale_color_viridis_d()+
-  facet_wrap(~dist_name)
-
-SaCount6_distributions_summary %>%
-  ggplot(aes(x=factor(Batch), y=meanTotal, color=factor(dist_name)))+
-  geom_boxplot()+
-  scale_y_log10()+
-  scale_color_viridis_d(option="turbo")
