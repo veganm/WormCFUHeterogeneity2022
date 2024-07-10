@@ -13,7 +13,7 @@ This code was written in R 4.4.0 running in Rstudio 2024.04.0 build 735.
 Before we do anything, we will need to load the packages this code depends on. Here we load the required packages, using PACkageMANager to install any that are missing.
 ```{r}
 ##install.packages("pacman") ## Uncomment and run if pacman is not already installed
-pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, readxl, patchwork, sBIC, lmtest)
+pacman::p_load(ggplot2, tidyverse, cowplot, mclust, e1071, ggpubr, ggpmisc, readxl, patchwork, sBIC, lmtest, car)
 ## and create a global variable
 xTextSize<-14
 ```
@@ -315,7 +315,8 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
                 # Inside batch size and for pairs of conditions, do tests
                 Boot.t<-t.test(logCFU~Condition, data=temp_data_long_s1)
                 Boot.w<-wilcox.test(logCFU~Condition, data=temp_data_long_s1, exact=FALSE)
-#              # glm significance for "Condition"
+
+              # glm - will retrieve significance for "Condition"
                myglm<-temp_data_long_s1 %>%
                  glm(logCFU~Condition+Run, family=Gamma, data=.)
                
@@ -324,14 +325,17 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
                myglm.nested<-temp_data_long_s1 %>%
                   glm(logCFU~Condition, family=Gamma, data=.)
                myglm.unique<-temp_data_long_s1 %>%
-                #mutate(unique_replicate=paste(set, replicate, sep="")) %>%
                 glm(logCFU~Condition*Run, family=Gamma, data=.)
+               
               myglm.lrt<-lrtest(myglm, myglm.nested)
+              myglm.lrtu<-lrtest(myglm, myglm.unique)
               glm_dim<-dim(coef(summary(myglm)))
               #print(AIC(myglm)) # debug
               #print(AIC(myglm.unique)) # debug
+              
               # ANOVA
-              my.aov<-aov(logCFU~Condition+Run, data=temp_data_long_s1)
+              my.levene<-leveneTest(logCFU~Condition+Run, data=temp_data_long_s1)
+              my.aov<-aov(logCFU~Condition*Run, data=temp_data_long_s1)
             
               #print(summary(my.aov))  #debug
             
@@ -346,9 +350,11 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
                         p.w=Boot.w$p.value,
                         p.glm=coef(summary(myglm))[glm_dim[1],glm_dim[2]], # obtain p value for Condition2
                         p.glm.lrt=myglm.lrt$`Pr(>Chisq)`[2],
+                        p.glm.lrtu=myglm.lrtu$`Pr(>Chisq)`[2],
                         p.glm.AIC=exp((AIC(myglm)-AIC(myglm.nested))/2),
                         p.glm.AICu=exp((AIC(myglm.unique)-AIC(myglm))/2),
-                        p.aov=summary(my.aov)[[1]][2,5]
+                        p.aov=summary(my.aov)[[1]][2,5],
+                        p.levene=my.levene$`Pr(>F)`[1]
               )
               idx_set<-idx_set+1 # advance index for replicate-based test results
       } # end internal loop over batch sizes
