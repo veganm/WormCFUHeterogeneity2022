@@ -1179,11 +1179,25 @@ exp((AIC(wormsimF.1.5.glm.single)-AIC(wormsimF.1.5.glm.single.nested))/2)
 
 wormsimF.1.5.glm.single.unique<-wormSimF.1.5 %>%
   dplyr::filter(batch==1) %>%
-  mutate(unique_replicate=paste(set, run, sep="")) %>%
-  glm(logCFU~unique_replicate, family=Gamma, data=.)
+  glm(logCFU~run*set, family=Gamma, data=.)
 summary(wormsimF.1.5.glm.single.unique)
 exp((AIC(wormsimF.1.5.glm.single)-AIC(wormsimF.1.5.glm.single.unique))/2)
 
+#~~~~~~~~~~~~~~
+# and ANOVA just to get the shape of the output
+wormsimF.1.5.aov.single<-wormSimF.1.5 %>%
+  dplyr::filter(batch==1) %>%
+  aov(logCFU~run+set, data=.)
+summary(wormsimF.1.5.aov.single)
+
+# let's implement Levene as well, although we know the answer here
+wormsimF.1.5.levene.single<-wormSimF.1.5 %>%
+  dplyr::filter(batch==1) %>%
+  leveneTest(logCFU~run*set, data=.)
+wormsimF.1.5.levene.single
+wormsimF.1.5.levene.single$`Pr(>F)`
+
+#~~~~~~~~~~~~~~
 # next batch sizes: batch 5
 wormsimF.1.5.glm.batch5<-wormSimF.1.5 %>%
   dplyr::filter(batch==5) %>%
@@ -1286,10 +1300,14 @@ SimBatchBetaSummaryCorrected<-function(input_data, alpha=0.05, alpha_AIC=0.5){
            isSig_w=as.integer(as.logical(p.w<alpha)),
            isSig_glm=as.integer(as.logical(p.glm<alpha)),
            isSig_lrt=as.integer(as.logical(p.glm.lrt<alpha)),
-           isSig_glm_lrt=as.integer(as.logical(p.glm<alpha & p.glm.lrt<alpha_AIC)),
-           isSig_glm_AIC=as.integer(as.logical(p.glm<alpha & p.glm.AIC<alpha_AIC)),
+#           isSig_glm_lrt=as.integer(as.logical(p.glm<alpha & p.glm.lrt<alpha_AIC)),
+#           isSig_glm_lrtu=as.integer(as.logical(p.glm<alpha & p.glm.lrtu<alpha_AIC)),
+           isSig_glm_lrt=as.integer(as.logical(p.glm<alpha & p.glm.lrt<alpha)),
+           isSig_glm_lrtu=as.integer(as.logical(p.glm<alpha & p.glm.lrtu<alpha)),
+            isSig_glm_AIC=as.integer(as.logical(p.glm<alpha & p.glm.AIC<alpha_AIC)),
            isSig_glm_AICu=as.integer(as.logical(p.glm<alpha & p.glm.AICu<alpha_AIC)),
-           isSig_aov=as.integer(as.logical(p.aov<alpha))
+           isSig_aov=as.integer(as.logical(p.aov<alpha)),
+           isSig_levene=as.integer(as.logical(p.levene<alpha))
     )
   input_data_testsummary<-input_data %>%
     group_by(dist, distB, batch) %>%
@@ -1297,21 +1315,27 @@ SimBatchBetaSummaryCorrected<-function(input_data, alpha=0.05, alpha_AIC=0.5){
               countSigW=sum(isSig_w),
               countSigGLM=sum(isSig_glm),
               countSigGLMLRT=sum(isSig_glm_lrt),
+              countSigGLMLRTu=sum(isSig_glm_lrtu),
               countSigGLMAIC=sum(isSig_glm_AIC),
               countSigGLMAICu=sum(isSig_glm_AICu),
               countSigAOV=sum(isSig_aov),
+              countSigLevene=sum(isSig_levene),
               n=n()) %>%
     mutate(fracSigT=countSigT/n,
            fracSigW=countSigW/n,
            fracSigGLM=countSigGLM/n,
            fracSigGLMLRT=countSigGLMLRT/n,
+           fracSigGLMLRTu=countSigGLMLRTu/n,
            fracSigGLMAIC=countSigGLMAIC/n,
            fracSigGLMAICu=countSigGLMAICu/n,
            fracSigAOV=countSigAOV/n,
+           fracSigLevene=countSigLevene/n
     ) %>%
     ungroup() %>%
     dplyr::select(dist, distB, batch, fracSigT, fracSigW, fracSigGLM,
-                  fracSigGLMLRT, fracSigGLMAIC, fracSigGLMAICu, fracSigAOV) %>%
+                  fracSigGLMLRT, fracSigGLMLRTu, 
+                  fracSigGLMAIC, fracSigGLMAICu, 
+                  fracSigAOV, fracSigLevene) %>%
     pivot_longer(cols=starts_with("fracSig"), names_to = "test", 
                  names_prefix = "fracSig", values_to = "fracSig")
   return(input_data_testsummary)
@@ -1422,6 +1446,7 @@ wormSimBatchBeta_regression_testsummary_n24<-rbind(wormSimBatchBeta.1.5.100runs_
 wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="T"]<-"t-test"
 wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="W"]<-"Wilcoxon"
 wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="GLMLRTu"]<-"GLM LRT Full"
 wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="GLMAICu"]<-"GLM AIC Full"
 wormSimBatchBeta_regression_testsummary_n24$test[wormSimBatchBeta_regression_testsummary_n24$test=="GLMAIC"]<-"GLM AIC"
 
@@ -1430,7 +1455,7 @@ wormSimBatchBeta_regression_testsummary_n24$n_samples<-24
 wormSimBatchBeta_regression_testsummary_n24<-wormSimBatchBeta_regression_testsummary_n24 %>%
   mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
   mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
-  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "Levene", "AOV", "GLM", "GLM LRT", "GLM LRT Full", "GLM AIC", "GLM AIC Full")))
 
   
 #### and plot
@@ -1506,13 +1531,14 @@ wormSimBatchBeta_regression_testsummary_n12<-rbind(wormSimBatchBeta.1.5.100runs.
 wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="T"]<-"t-test"
 wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="W"]<-"Wilcoxon"
 wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="GLMLRTu"]<-"GLM LRT Full"
 wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="GLMAICu"]<-"GLM AIC Full"
 wormSimBatchBeta_regression_testsummary_n12$test[wormSimBatchBeta_regression_testsummary_n12$test=="GLMAIC"]<-"GLM AIC"
 
 wormSimBatchBeta_regression_testsummary_n12<-wormSimBatchBeta_regression_testsummary_n12 %>%
   mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
   mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
-  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "Levene", "AOV", "GLM", "GLM LRT", "GLM LRT Full", "GLM AIC", "GLM AIC Full")))
 wormSimBatchBeta_regression_testsummary_n12$n_samples<-12
 
 pwormSimBatchBeta_regression_testsummary_n12<-wormSimBatchBeta_regression_testsummary_n12 %>%
@@ -1587,6 +1613,7 @@ wormSimBatchBeta_regression_testsummary_n6<-rbind(wormSimBatchBeta.1.5.100runs.n
 wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="T"]<-"t-test"
 wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="W"]<-"Wilcoxon"
 wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="GLMLRTu"]<-"GLM LRT Full"
 wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="GLMAICu"]<-"GLM AIC Full"
 wormSimBatchBeta_regression_testsummary_n6$test[wormSimBatchBeta_regression_testsummary_n6$test=="GLMAIC"]<-"GLM AIC"
 
@@ -1595,7 +1622,7 @@ wormSimBatchBeta_regression_testsummary_n6$n_samples<-6
 wormSimBatchBeta_regression_testsummary_n6<-wormSimBatchBeta_regression_testsummary_n6 %>%
   mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
   mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
-  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "Levene", "AOV", "GLM", "GLM LRT", "GLM LRT Full", "GLM AIC", "GLM AIC Full")))
 
 pwormSimBatchBeta_regression_testsummary_n6<-wormSimBatchBeta_regression_testsummary_n6 %>%
   ggplot(aes(x=factor(batch), y=fracSig, fill=factor(test)))+
@@ -1611,6 +1638,7 @@ pwormSimBatchBeta_regression_testsummary_n6<-wormSimBatchBeta_regression_testsum
   facet_grid(vars(dist), vars(text_reps))+
   labs(x="Batch Size", y="Fraction Significant", fill="Test",
        title="Test Results, Data With Replicates, n=6")
+pwormSimBatchBeta_regression_testsummary_n6
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # And comparing two different distributions?
@@ -1621,7 +1649,7 @@ glimpse(wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary)
 rm(wormSimBatchBeta.1v2.5.100runs.n12.3reps)
 wormSimBatchBeta.1v2.5.100runs.n12.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n12.3reps_testsummary$nreps<-3
-rm(wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n12.3reps.summary)
 
 wormSimBatchBeta.1v2.5.100runs.n12.6reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=12, runs=100, reps=6, sameParams=FALSE)
 wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary<-wormSimBatchBeta.1v2.5.100runs.n12.6reps$data_summary
@@ -1629,14 +1657,14 @@ glimpse(wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary)
 rm(wormSimBatchBeta.1v2.5.100runs.n12.6reps)
 wormSimBatchBeta.1v2.5.100runs.n12.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n12.6reps_testsummary$nreps<-6
-rm(wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n12.6reps.summary)
 
 wormSimBatchBeta.1v2.5.100runs.n12.12reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=12, runs=100, reps=12, sameParams=FALSE)
 wormSimBatchBeta.1v2.5.100runs.n12.12reps.summary<-wormSimBatchBeta.1v2.5.100runs.n12.12reps$data_summary
 rm(wormSimBatchBeta.1v2.5.100runs.n12.12reps)
 wormSimBatchBeta.1v2.5.100runs.n12.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n12.12reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n12.12reps_testsummary$nreps<-12
-rm(wormSimBatchBeta.1v2.5.100runs.n12.12reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n12.12reps.summary)
 
 wormSimBatchBeta.1v2.5_regression_testsummary_n12<-rbind(wormSimBatchBeta.1v2.5.100runs.n12.3reps_testsummary,
                                                   wormSimBatchBeta.1v2.5.100runs.n12.6reps_testsummary,
@@ -1647,13 +1675,14 @@ wormSimBatchBeta.1v2.5_regression_testsummary_n12<-rbind(wormSimBatchBeta.1v2.5.
 wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="T"]<-"t-test"
 wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="W"]<-"Wilcoxon"
 wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="GLMLRTu"]<-"GLM LRT Full"
 wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="GLMAICu"]<-"GLM AIC Full"
 wormSimBatchBeta.1v2.5_regression_testsummary_n12$test[wormSimBatchBeta.1v2.5_regression_testsummary_n12$test=="GLMAIC"]<-"GLM AIC"
 
 wormSimBatchBeta.1v2.5_regression_testsummary_n12<-wormSimBatchBeta.1v2.5_regression_testsummary_n12 %>%
   mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
   mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
-  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "Levene", "AOV", "GLM", "GLM LRT", "GLM LRT Full", "GLM AIC", "GLM AIC Full")))
 wormSimBatchBeta.1v2.5_regression_testsummary_n12$n_samples<-12
 
 pwormSimBatchBeta.1v2.5_regression_testsummary_n12<-wormSimBatchBeta.1v2.5_regression_testsummary_n12 %>%
@@ -1672,14 +1701,12 @@ pwormSimBatchBeta.1v2.5_regression_testsummary_n12<-wormSimBatchBeta.1v2.5_regre
        title="Beta(1,5) vs Beta(2,5), n=12")
 pwormSimBatchBeta.1v2.5_regression_testsummary_n12
 
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# FIGURE S9  
 # combine plots
 pwormSimBatchBeta_regression_testsummary_n6 + pwormSimBatchBeta_regression_testsummary_n12 + 
   pwormSimBatchBeta_regression_testsummary_n24 + pwormSimBatchBeta.1v2.5_regression_testsummary_n12 +
   plot_annotation(tag_levels = "A") + plot_layout(ncol=2, guides="collect")
-ggsave("FigS9_wormSimBatchBeta_regression.png", width=12, height=10, units="in", dpi=300)
+#ggsave("FigS9_wormSimBatchBeta_regression.png", width=12, height=10, units="in", dpi=300)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1691,26 +1718,26 @@ ggsave("FigS9_wormSimBatchBeta_regression.png", width=12, height=10, units="in",
 # With n=6
 wormSimBatchBeta.1v2.5.100runs.n6.3reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=6, runs=100, reps=3, sameParams=FALSE)
 wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary<-wormSimBatchBeta.1v2.5.100runs.n6.3reps$data_summary
-glimpse(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
+#glimpse(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
 rm(wormSimBatchBeta.1v2.5.100runs.n6.3reps)
 wormSimBatchBeta.1v2.5.100runs.n6.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n6.3reps_testsummary$nreps<-3
-rm(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n6.3reps.summary)
 
 wormSimBatchBeta.1v2.5.100runs.n6.6reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=6, runs=100, reps=6, sameParams=FALSE)
 wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary<-wormSimBatchBeta.1v2.5.100runs.n6.6reps$data_summary
-glimpse(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
+#glimpse(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
 rm(wormSimBatchBeta.1v2.5.100runs.n6.6reps)
 wormSimBatchBeta.1v2.5.100runs.n6.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n6.6reps_testsummary$nreps<-6
-rm(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n6.6reps.summary)
 
 wormSimBatchBeta.1v2.5.100runs.n6.12reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=6, runs=100, reps=12, sameParams=FALSE)
 wormSimBatchBeta.1v2.5.100runs.n6.12reps.summary<-wormSimBatchBeta.1v2.5.100runs.n6.12reps$data_summary
 rm(wormSimBatchBeta.1v2.5.100runs.n6.12reps)
 wormSimBatchBeta.1v2.5.100runs.n6.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n6.12reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n6.12reps_testsummary$nreps<-12
-rm(wormSimBatchBeta.1v2.5.100runs.n6.12reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n6.12reps.summary)
 
 wormSimBatchBeta.1v2.5_regression_testsummary_n6<-rbind(wormSimBatchBeta.1v2.5.100runs.n6.3reps_testsummary,
                                                          wormSimBatchBeta.1v2.5.100runs.n6.6reps_testsummary,
@@ -1720,13 +1747,14 @@ wormSimBatchBeta.1v2.5_regression_testsummary_n6<-rbind(wormSimBatchBeta.1v2.5.1
 wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="T"]<-"t-test"
 wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="W"]<-"Wilcoxon"
 wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="GLMLRTu"]<-"GLM LRT Full"
 wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="GLMAICu"]<-"GLM AIC Full"
 wormSimBatchBeta.1v2.5_regression_testsummary_n6$test[wormSimBatchBeta.1v2.5_regression_testsummary_n6$test=="GLMAIC"]<-"GLM AIC"
 
 wormSimBatchBeta.1v2.5_regression_testsummary_n6<-wormSimBatchBeta.1v2.5_regression_testsummary_n6 %>%
   mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
   mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
-  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "Levene", "AOV", "GLM", "GLM LRT", "GLM LRT Full", "GLM AIC", "GLM AIC Full")))
 wormSimBatchBeta.1v2.5_regression_testsummary_n6$n_samples<-6
 
 #~~~~~~~~~~~~~~~~~~~~
@@ -1737,7 +1765,7 @@ wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary<-wormSimBatchBeta.1v2.5.100runs
 rm(wormSimBatchBeta.1v2.5.100runs.n24.3reps)
 wormSimBatchBeta.1v2.5.100runs.n24.3reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n24.3reps_testsummary$nreps<-3
-rm(wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n24.3reps.summary)
 
 wormSimBatchBeta.1v2.5.100runs.n24.6reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=24, runs=100, reps=6, sameParams=FALSE)
 wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary<-wormSimBatchBeta.1v2.5.100runs.n24.6reps$data_summary
@@ -1745,14 +1773,14 @@ wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary<-wormSimBatchBeta.1v2.5.100runs
 rm(wormSimBatchBeta.1v2.5.100runs.n24.6reps)
 wormSimBatchBeta.1v2.5.100runs.n24.6reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n24.6reps_testsummary$nreps<-6
-rm(wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n24.6reps.summary)
 
 wormSimBatchBeta.1v2.5.100runs.n24.12reps<-wormSimBatchBeta3(a=1, b=5, a_alt=2, b_alt=5, nWorms=5000, maxSamples=24, runs=100, reps=12, sameParams=FALSE)
 wormSimBatchBeta.1v2.5.100runs.n24.12reps.summary<-wormSimBatchBeta.1v2.5.100runs.n24.12reps$data_summary
 rm(wormSimBatchBeta.1v2.5.100runs.n24.12reps)
 wormSimBatchBeta.1v2.5.100runs.n24.12reps_testsummary<-SimBatchBetaSummaryCorrected(wormSimBatchBeta.1v2.5.100runs.n24.12reps.summary)
 wormSimBatchBeta.1v2.5.100runs.n24.12reps_testsummary$nreps<-12
-rm(wormSimBatchBeta.1v2.5.100runs.n24.12reps.summary)
+#rm(wormSimBatchBeta.1v2.5.100runs.n24.12reps.summary)
 
 wormSimBatchBeta.1v2.5_regression_testsummary_n24<-rbind(wormSimBatchBeta.1v2.5.100runs.n24.3reps_testsummary,
                                                         wormSimBatchBeta.1v2.5.100runs.n24.6reps_testsummary,
@@ -1762,6 +1790,7 @@ wormSimBatchBeta.1v2.5_regression_testsummary_n24<-rbind(wormSimBatchBeta.1v2.5.
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="T"]<-"t-test"
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="W"]<-"Wilcoxon"
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="GLMLRT"]<-"GLM LRT"
+wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="GLMLRTu"]<-"GLM LRT Full"
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="GLMAICu"]<-"GLM AIC Full"
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$test[wormSimBatchBeta.1v2.5_regression_testsummary_n24$test=="GLMAIC"]<-"GLM AIC"
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$n_samples<-24
@@ -1769,15 +1798,15 @@ wormSimBatchBeta.1v2.5_regression_testsummary_n24$n_samples<-24
 wormSimBatchBeta.1v2.5_regression_testsummary_n24<-wormSimBatchBeta.1v2.5_regression_testsummary_n24 %>%
   mutate(text_reps=paste(nreps, "Reps", sep=" ")) %>%
   mutate(text_reps = factor(text_reps, levels=c("3 Reps", "6 Reps", "12 Reps"))) %>%
-  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "AOV", "GLM", "GLM LRT", "GLM AIC", "GLM AIC Full")))
+  mutate(test=factor(test, levels=c("t-test", "Wilcoxon", "Levene", "AOV", "GLM", "GLM LRT", "GLM LRT Full", "GLM AIC", "GLM AIC Full")))
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$n_samples<-24
 
 #~~~~~~~~~~~
 # merge data for n=12 samples
-glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n12)
+#glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n12)
 wormSimBatchBeta.1v2.5_regression_testsummary_n12$fracCorrect<-wormSimBatchBeta.1v2.5_regression_testsummary_n12$fracSig
-unique(wormSimBatchBeta.1v2.5_regression_testsummary_n12$distB)
-glimpse(wormSimBatchBeta_regression_testsummary_n12)
+#unique(wormSimBatchBeta.1v2.5_regression_testsummary_n12$distB)
+#glimpse(wormSimBatchBeta_regression_testsummary_n12)
 wormSimBatchBeta_regression_testsummary_n12$fracCorrect<-1-wormSimBatchBeta_regression_testsummary_n12$fracSig
 
 # all with 12 samples
@@ -1787,7 +1816,7 @@ wormSimBatchBeta_regression_testsummary_n12_merge<-rbind(wormSimBatchBeta_regres
 
 # plot
 pwormSimBatchBeta_regression_testsummary_n12_merge<-wormSimBatchBeta_regression_testsummary_n12_merge %>%
-  dplyr::filter(distB!="Beta(5,5)") %>%
+  dplyr::filter(distB!="Beta(5,5)"& test!="Levene") %>%
   ggplot(aes(x=factor(batch), y=fracCorrect, color=test))+
 #  ggplot(aes(x=factor(batch), y=fracCorrect, color=test, linetype=factor(text_reps)))+
   geom_point()+
@@ -1807,25 +1836,26 @@ pwormSimBatchBeta_regression_testsummary_n12_merge<-wormSimBatchBeta_regression_
   labs(x="Batch Size", y="Fraction Correct", color="Test",
        linetype="Dist2", 
        title="Beta(1,5) vs Dist2, n=12")
+pwormSimBatchBeta_regression_testsummary_n12_merge
 
 # how to get these lines on the same plot? idk yet
 
 #~~~~~~~~~~~
 # merge data for n=6 samples
-glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n6)
+#glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n6)
 wormSimBatchBeta.1v2.5_regression_testsummary_n6$fracCorrect<-wormSimBatchBeta.1v2.5_regression_testsummary_n6$fracSig
-unique(wormSimBatchBeta.1v2.5_regression_testsummary_n6$distB)
-glimpse(wormSimBatchBeta_regression_testsummary_n6)
+#unique(wormSimBatchBeta.1v2.5_regression_testsummary_n6$distB)
+#glimpse(wormSimBatchBeta_regression_testsummary_n6)
 wormSimBatchBeta_regression_testsummary_n6$fracCorrect<-1-wormSimBatchBeta_regression_testsummary_n6$fracSig
 
-# all with 12 samples
+# all with 6 samples
 wormSimBatchBeta_regression_testsummary_n6_merge<-rbind(wormSimBatchBeta_regression_testsummary_n6,
                                                          wormSimBatchBeta.1v2.5_regression_testsummary_n6)
 
 
 # plot
 pwormSimBatchBeta_regression_testsummary_n6_merge<-wormSimBatchBeta_regression_testsummary_n6_merge %>%
-  dplyr::filter(distB!="Beta(5,5)") %>%
+  dplyr::filter(distB!="Beta(5,5)" & test!="Levene") %>%
   ggplot(aes(x=factor(batch), y=fracCorrect, color=test))+
   #  ggplot(aes(x=factor(batch), y=fracCorrect, color=test, linetype=factor(text_reps)))+
   geom_point()+
@@ -1845,13 +1875,14 @@ pwormSimBatchBeta_regression_testsummary_n6_merge<-wormSimBatchBeta_regression_t
   labs(x="Batch Size", y="Fraction Correct", color="Test",
        linetype="Dist2", 
        title="Beta(1,5) vs Dist2, n=6")
+pwormSimBatchBeta_regression_testsummary_n6_merge
 
 #~~~~~~~~~~~
 # merge data for n=24 samples
-glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n24)
+#glimpse(wormSimBatchBeta.1v2.5_regression_testsummary_n24)
 wormSimBatchBeta.1v2.5_regression_testsummary_n24$fracCorrect<-wormSimBatchBeta.1v2.5_regression_testsummary_n24$fracSig
-unique(wormSimBatchBeta.1v2.5_regression_testsummary_n24$distB)
-glimpse(wormSimBatchBeta_regression_testsummary_n24)
+#unique(wormSimBatchBeta.1v2.5_regression_testsummary_n24$distB)
+#glimpse(wormSimBatchBeta_regression_testsummary_n24)
 wormSimBatchBeta_regression_testsummary_n24$fracCorrect<-1-wormSimBatchBeta_regression_testsummary_n24$fracSig
 
 # all with 24 samples
@@ -1861,7 +1892,7 @@ wormSimBatchBeta_regression_testsummary_n24_merge<-rbind(wormSimBatchBeta_regres
 
 # plot
 pwormSimBatchBeta_regression_testsummary_n24_merge<-wormSimBatchBeta_regression_testsummary_n24_merge %>%
-  dplyr::filter(distB!="Beta(5,5)") %>%
+  dplyr::filter(distB!="Beta(5,5)" & test!="Levene") %>%
   ggplot(aes(x=factor(batch), y=fracCorrect, color=test))+
   #  ggplot(aes(x=factor(batch), y=fracCorrect, color=test, linetype=factor(text_reps)))+
   geom_point()+
@@ -1893,6 +1924,25 @@ pwormSimBatchBeta_regression_testsummary_n6_merge +
 ggsave("FigureS9_FractionCorrectBeta.png", width=15, height=6, units="in", dpi=300)
 #
 #
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
