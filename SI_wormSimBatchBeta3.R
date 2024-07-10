@@ -66,7 +66,9 @@ wormSimBatchBeta3<-function(a, b, a_alt=1, b_alt=1, nWorms, maxSamples, runs, re
       mydata$logCFU<-log10(mydata$FinalCount)    # create & correct log final counts
       mydata$logCFU[!is.finite(mydata$logCFU)]<-1
       mydata$logCFU[mydata$logCFU<0]<-1
+      
       #print(min(mydata$logCFU)) # debug
+      #print(unique(mydata$set)) #debug
       
       mydata$replicate<-as.character(mydata$replicate) # make sure replicate is an index, not a number
       
@@ -76,24 +78,33 @@ wormSimBatchBeta3<-function(a, b, a_alt=1, b_alt=1, nWorms, maxSamples, runs, re
       }
       #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       
+      #print(names(mydata)) #debug
+      
       # tests
       ttest1<-t.test(tempA, tempB)
       wtest1<-wilcox.test(tempA, tempB, exact=FALSE)
       
       # glm significance for "set"
-      myglm<-mydata %>%
-        glm(logCFU~replicate+set, family=Gamma, data=.)
-      myglm.nested<-mydata %>%
-        glm(logCFU~set, family=Gamma, data=.)
+      myglm<-glm(logCFU~replicate+set, family=Gamma, data=mydata)
+      #print(AIC(myglm)) # debug
+      
+      myglm.nested<-glm(logCFU~set, family=Gamma, data=mydata)
+      #print(AIC(myglm.nested)) # debug
+      
+      #myglm.unique<-glm(logCFU~replicate*set, family=Gamma, data=mydata)
       myglm.unique<-mydata %>%
         mutate(unique_replicate=paste(set, replicate, sep="")) %>%
         glm(logCFU~unique_replicate, family=Gamma, data=.)
-     myglm.lrt<-lrtest(myglm, myglm.nested)
-     #print(AIC(myglm)) # debug
-     #print(AIC(myglm.unique)) # debug
+      #print(AIC(myglm.unique)) # debug
+     
+      myglm.lrt<-lrtest(myglm, myglm.nested)
+      myglm.lrtu<-lrtest(myglm, myglm.unique)
       
       # ANOVA
       my.aov<-aov(logCFU~replicate+set, data=mydata)
+      #print(AIC(my.aov)) # debug
+      my.levene<-leveneTest(logCFU~replicate*set, data=mydata)
+      #print(my.levene$`Pr(>F)`) #debug
       
       # store summary stats
       temp[[idx]]<-tibble(
@@ -120,9 +131,11 @@ wormSimBatchBeta3<-function(a, b, a_alt=1, b_alt=1, nWorms, maxSamples, runs, re
         p.w=wtest1$p.value,
         p.glm=coef(summary(myglm))["setB",4], # obtain p values
         p.glm.lrt=myglm.lrt$`Pr(>Chisq)`[2],
+        p.glm.lrtu=myglm.lrtu$`Pr(>Chisq)`[2],
         p.glm.AIC=exp((AIC(myglm)-AIC(myglm.nested))/2),
         p.glm.AICu=exp((AIC(myglm.unique)-AIC(myglm))/2),
-        p.aov=summary(my.aov)[[1]][2,5]
+        p.aov=summary(my.aov)[[1]][2,5],
+        p.levene=my.levene$`Pr(>F)`[1]
       )
       idx<-idx+1
   } # end loop over batch sizes (k)
