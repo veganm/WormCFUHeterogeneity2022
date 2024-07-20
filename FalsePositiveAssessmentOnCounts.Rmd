@@ -334,7 +334,7 @@ bootOnCountsStats<-function(input_data, batch_sizes=c(1,5,10,20,50), nboot=1000,
               #print(AIC(myglm.unique)) # debug
               
               # ANOVA
-              my.levene<-leveneTest(logCFU~Condition+Run, data=temp_data_long_s1)
+              my.levene<-leveneTest(logCFU~Condition*Run, data=temp_data_long_s1)
               my.aov<-aov(logCFU~Condition*Run, data=temp_data_long_s1)
             
               #print(summary(my.aov))  #debug
@@ -842,8 +842,10 @@ unique(input_data$Run)
 ```
 As always, it's a good idea to plot out and make sure the data look OK before proceeding:
 ```{r}
+input_data$Run<-as.factor(input_data$Run)
+
 input_data %>%
-  ggplot(aes(x=factor(Run), y=logCFU, color=factor(Run))) + ## plot bacterial load for each experiment (run)
+  ggplot(aes(x=Run, y=logCFU, color=Run)) + ## plot bacterial load for each experiment (run)
   geom_jitter(shape=16, position=position_jitter(0.05)) +   ## with a small jitter for visibility
   geom_violin(fill=NA) +    ## and a violin silhouette to see density more easily
   ylim(-0.1,6)+  ## y limits help to keep the plot nice but aren't really needed here
@@ -862,16 +864,19 @@ Because more than one experimental condition is present, we have the opportunity
 For an ANOVA to be valid, we need to know that the data are homoscedastic (equal variances):
 ```{r}
 # Levene's test is commonly used to assess heteroscedasticity
+leveneTest(logCFU ~ Condition*Run, data=input_data)
 ```
 
 And ideally that the data are normally distributed (although ANOVA is fairly robust to this assumption):
 ```{r}
 # Shapiro-Wilk is a common test for normality, but there are others
-# For example, Koromogorov-Smirnov is sometimes used, but this test is very sensitive to sample size
-
+SA1<-input_data %>%
+  dplyr::filter(Condition=="SA" & Run=="1") %>%
+  dplyr::select(logCFU) 
+shapiro.test(SA1[[1]])
 ```
 
-Let's assume for a minute that these tests show that our data are homoscedastic and normally distributed, so we are completely comfortable applying an ANOVA. We will bootstrap this to assess significance rates, but before we decide to rely on these results, it is a good idea to run ANOVA on the observed data:
+Let's assume for a minute that these tests show that our data are homoscedastic and normally distributed, so we are completely comfortable applying an ANOVA. We will bootstrap this to assess significance rates, but before we decide to rely on these results, it is a good idea to run ANOVA on the observed data to see how well the model performs:
 ```{r}
 input_data.aov<-input_data %>%
   mutate(Run=as.factor(Run)) %>%
